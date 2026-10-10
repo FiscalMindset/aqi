@@ -83,9 +83,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ANN", "S", "PLR", "ARG", "SLF001", "PLR2004"]
+"tests/*" = ["ANN", "S", "PLR", "ARG", "SLF001", "PLR2004", "PLC0415", "BLE001", "SIM105"]
 # FastAPI's documented DI pattern calls Depends() in default arguments.
 "src/dhuan/api/*" = ["B008"]
+"tests/*" = ["ANN", "S", "PLR", "ARG", "SLF001", "PLR2004", "PLC0415", "BLE001", "SIM105"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -102,3 +103,8 @@ exclude = ["tests/", "build/"]
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "joblib.*", "h3.*"]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "awscrt>=0.37.0",
+]

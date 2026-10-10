@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import boto3
@@ -26,6 +27,11 @@ from dhuan.ingest.types import FeedStatus
 logger = get_logger("store.dynamodb")
 
 ESTIMATES_TTL_DAYS = 90
+
+
+def _dec(value: float | int) -> Decimal:
+    """DynamoDB stores numbers as Decimal; float serialisation raises TypeError."""
+    return Decimal(str(value))
 
 
 def _client_config() -> Config:
@@ -73,9 +79,9 @@ class EstimatesStore:
             "sk": f"ts#{ts.isoformat()}",
             "cell": cell,
             "ts": ts.isoformat(),
-            "pm25_low": round(pm25_low, 2),
-            "pm25_mid": round(pm25_mid, 2),
-            "pm25_high": round(pm25_high, 2),
+            "pm25_low": _dec(round(pm25_low, 2)),
+            "pm25_mid": _dec(round(pm25_mid, 2)),
+            "pm25_high": _dec(round(pm25_high, 2)),
             "model_version": model_version,
             "ttl": int((ts + timedelta(days=ESTIMATES_TTL_DAYS)).timestamp()),
         }
@@ -183,8 +189,8 @@ class SubscriptionsStore:
                 "pk": f"sub#{sub_id}",
                 "email": email.strip().lower(),
                 "locality": locality.strip(),
-                "lat": lat,
-                "lon": lon,
+                "lat": _dec(lat),
+                "lon": _dec(lon),
                 "threshold_category": threshold_category,
                 "confirmed": confirmed,
                 "created_at": now.isoformat(),
