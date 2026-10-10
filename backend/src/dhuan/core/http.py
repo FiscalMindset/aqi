@@ -12,10 +12,10 @@ Retries are only applied to idempotent verbs (GET) and to explicit
 
 from __future__ import annotations
 
-import asyncio
 import random
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 import httpx
 from tenacity import (
@@ -27,6 +27,7 @@ from tenacity import (
 
 from dhuan.core.config import Settings, get_settings
 from dhuan.core.logging import get_logger, log_event
+from dhuan.core.metrics import record
 
 logger = get_logger("http")
 
@@ -67,12 +68,14 @@ def _retrying(policy: HttpPolicy) -> AsyncRetrying:
         wait=wait_exponential_jitter(
             initial=policy.base_delay_seconds, max=policy.max_delay_seconds, jitter=1.0
         ),
-        retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError, UpstreamRetry)),
+        retry=retry_if_exception_type(
+            (httpx.TimeoutException, httpx.NetworkError, UpstreamRetryError)
+        ),
         reraise=True,
     )
 
 
-class UpstreamRetry(Exception):
+class UpstreamRetryError(Exception):
     """Internal signal: response looks retryable."""
 
     def __init__(self, response: httpx.Response) -> None:
@@ -99,11 +102,9 @@ async def make_request(
     headers: dict[str, str] | None = None,
     json: Any = None,
     data: Any = None,
-    timeout: float | None = None,
+    timeout: float | None = None,  # noqa: ASYNC109 - per-call override is intentional
 ) -> httpx.Response:
     """GET/POST with timeouts, exponential backoff + jitter, logging + metrics."""
-    from dhuan.core.metrics import record
-
     attempts = 0
     async for attempt in _retrying(policy):
         with attempt:
@@ -131,7 +132,7 @@ async def make_request(
                     source=source, url=url, status=resp.status_code, attempt=attempts,
                 )
                 record("UpstreamRetries", 1)
-                raise UpstreamRetry(resp)
+                raise UpstreamRetryError(resp)
             if resp.status_code >= 400:
                 log_event(
                     logger, 40, "upstream_error_status",
@@ -154,6 +155,7 @@ class UpstreamClient:
 
     def __init__(self, source: str, base_url: str, settings: Settings | None = None) -> None:
         self.source = source
+        self.base_url = base_url
         self.settings = settings or get_settings()
         self.policy = HttpPolicy.from_settings(self.settings)
         self.client = make_client(self.policy)
@@ -172,8 +174,16 @@ class UpstreamClient:
         await self.client.aclose()
 
 
+def _jitter() -> float:
+    """Uniform jitter. Not a security primitive (S311)."""
+    return random.random()  # noqa: S311 - jitter for retries, not cryptographic
+
+
 def jitter_sleep_seconds(base: float, attempt: int) -> float:
-    return min(base * (2 ** (attempt - 1)) * (0.5 + random.random() / 2), 30.0)
+    """Backoff with full jitter, capped. Jitter is not a security primitive."""
+    base_delay: float = base * (2 ** (attempt - 1))
+    delay: float = base_delay * (0.5 + _jitter() / 2)
+    return min(delay, 30.0)
 
 
 def endpoints_round_robin(endpoints: Iterable[str]) -> list[str]:
@@ -187,7 +197,7 @@ async def first_success(calls: list[Any]) -> Any:
     for call in calls:
         try:
             return await call()
-        except Exception as exc:  # noqa: BLE001 - mirror fallback tries next
+        except Exception as exc:
             last_exc = exc
     if last_exc:
         raise last_exc

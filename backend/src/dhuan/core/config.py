@@ -18,7 +18,7 @@ from dhuan.core.units import Bbox, Point
 
 _DELHI_BBOX = Bbox(
     min_lat=28.38, min_lon=76.83, max_lat=28.92, max_lon=77.36
-)  # approximates Delhi-NCR extent
+)  # approximates core Delhi-NCR extent; full coverage polygon is in geo/
 
 
 class Settings(BaseSettings):
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     env: Literal["dev", "staging", "prod", "test"] = "dev"
     demo_mode: bool = False
     log_level: str = "INFO"
-    api_host: str = "0.0.0.0"
+    api_host: str = "0.0.0.0"  # noqa: S104 - container binds all interfaces by design
     api_port: int = 8000
     api_version: str = "0.1.0"
     service_name: str = "dhuan-detective"
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     # alerts
     sms_enabled: bool = False
 
-    @field_validator("demo_mode", mode="before")
+    @field_validator("demo_mode", "sms_enabled", mode="before")
     @classmethod
     def _parse_bool(cls, v: object) -> object:
         if isinstance(v, str):
@@ -86,15 +86,10 @@ class Settings(BaseSettings):
     def is_demo(self) -> bool:
         return self.demo_mode
 
-    def assert_not_demo_for_claim(self, claim: str) -> None:
-        """Guard: banned pattern is claiming demo data as live."""
-        if self.demo_mode:
-            raise RuntimeError(f"refusing to present demo data as {claim}")
-
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]  # pydantic-settings injects env
+    return Settings()
 
 
 def point_in_delhi(p: Point, settings: Settings | None = None) -> bool:

@@ -17,8 +17,9 @@ def initial_bearing_deg(a: Point, b: Point) -> float:
     dlon = math.radians(b.lon - a.lon)
     x = math.sin(dlon) * math.cos(lat2)
     y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
-    bearing = math.degrees(math.atan2(x, y))
-    return bearing % 360.0
+    bearing = math.degrees(math.atan2(x, y)) % 360.0
+    # float safety: tiny negatives can modulo to exactly 360.0
+    return 0.0 if bearing >= 360.0 else bearing
 
 
 def angle_diff_deg(a: float, b: float) -> float:
@@ -49,7 +50,9 @@ def destination_point(origin: Point, bearing_deg: float, distance_km: float) -> 
     lat1, lon1 = math.radians(origin.lat), math.radians(origin.lon)
     theta = math.radians(bearing_deg)
     dr = distance_km / EARTH_RADIUS_KM
-    lat2 = math.asin(math.sin(lat1) * math.cos(dr) + math.cos(lat1) * math.sin(dr) * math.cos(theta))
+    lat2 = math.asin(
+        math.sin(lat1) * math.cos(dr) + math.cos(lat1) * math.sin(dr) * math.cos(theta)
+    )
     lon2 = lon1 + math.atan2(
         math.sin(theta) * math.sin(dr) * math.cos(lat1),
         math.cos(dr) - math.sin(lat1) * math.sin(lat2),
@@ -80,7 +83,8 @@ def point_in_ring(p: Point, ring: list[list[float]]) -> bool:
 
 def bearing_of_vector(dx_km: float, dy_km: float) -> float:
     """Bearing of an east/north offset pair in km (x=east, y=north)."""
-    return math.degrees(math.atan2(dx_km, dy_km)) % 360.0
+    brg = math.degrees(math.atan2(dx_km, dy_km)) % 360.0
+    return 0.0 if brg >= 360.0 else brg
 
 
 def compass_label(bearing_deg: float) -> str:

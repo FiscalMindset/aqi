@@ -1,36 +1,33 @@
-"""X-Ray tracing via AWS Lambda Powertools; no-op outside Lambda."""
+"""X-Ray tracing via AWS Lambda Powertools; a no-op tracer outside Lambda."""
 
 from __future__ import annotations
 
+import contextlib
 import os
+from functools import lru_cache
 from typing import Any
 
-_tracer: Any = None
+
+class _NoopTracer:
+    """Zero-overhead tracer for local dev and tests."""
+
+    def capture_method(self, func: Any) -> Any:
+        return func
+
+    def capture_subsegment(self, *_args: Any, **_kwargs: Any) -> Any:
+        return contextlib.nullcontext()
+
+    def put_annotation(self, _key: str, _value: Any) -> None:
+        return None
+
+    def put_metadata(self, _key: str, _value: Any) -> None:
+        return None
 
 
+@lru_cache
 def get_tracer() -> Any:
-    global _tracer
-    if _tracer is None:
-        if os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
-            from aws_lambda_powertools import Tracer
+    if os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        from aws_lambda_powertools import Tracer  # noqa: PLC0415 - only importable inside Lambda
 
-            _tracer = Tracer()
-        else:
-
-            class _NoopTracer:
-                def capture_method(self, func: Any) -> Any:  # noqa: D102
-                    return func
-
-                def capture_subsegment(self, *a: Any, **k: Any) -> Any:  # noqa: D102
-                    import contextlib
-
-                    return contextlib.nullcontext()
-
-                def put_annotation(self, key: str, value: Any) -> None:  # noqa: D102
-                    return None
-
-                def put_metadata(self, key: str, value: Any) -> None:  # noqa: D102
-                    return None
-
-            _tracer = _NoopTracer()
-    return _tracer
+        return Tracer()
+    return _NoopTracer()
