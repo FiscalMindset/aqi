@@ -74,7 +74,9 @@ def test_subscriptions_idempotent(dynamodb: object, env: dict[str, str]) -> None
     store.delete(other_id)
 
 
-def test_feeds_store_and_status_route(dynamodb: object, api: TestClient, env: dict[str, str]) -> None:
+def test_feeds_store_and_status_route(
+    dynamodb: object, api: TestClient, env: dict[str, str]
+) -> None:
     from dhuan.store.dynamodb import FeedsStore
 
     FeedsStore().record_success("openaq", records=3)

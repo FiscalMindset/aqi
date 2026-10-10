@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from pathlib import Path
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -109,7 +109,7 @@ def dynamodb(env: dict[str, str]) -> Iterator[Any]:
                 }
             ],
         )
-    except Exception as exc:  # noqa: BLE001 - already exists from a prior run
+    except Exception as exc:  # may already exist from a prior run
         print(f"gsi: {exc}")
     yield client
     for name, _ in tables:
@@ -149,6 +149,6 @@ def source_index(env: dict[str, str]) -> Iterator[Any]:
     yield index
     try:
         index.es.indices.delete(index=index.index)
-    except Exception:  # noqa: BLE001 - index may not exist in a failure run
+    except Exception:  # index may not exist in a failure run
         pass
     index.close()
