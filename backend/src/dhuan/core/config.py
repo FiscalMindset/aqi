@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     # alerts
     sms_enabled: bool = False
 
+    # api surface
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+
+    # demo data (recorded fixtures, only used when DEMO_MODE=1)
+    demo_data_dir: str = ""
+
     @field_validator("demo_mode", "sms_enabled", mode="before")
     @classmethod
     def _parse_bool(cls, v: object) -> object:

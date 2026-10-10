@@ -44,7 +44,9 @@ class Reading:
     license_note: str = "OpenAQ (CC BY 4.0)"
 
     def age_seconds(self) -> float:
-        return (utcnow() - self.observed_at).total_seconds()
+        # clamped at 0: provider clocks can run slightly ahead; a negative
+        # age is meaningless and must never be shown
+        return max(0.0, (utcnow() - self.observed_at).total_seconds())
 
 
 @dataclass(slots=True)

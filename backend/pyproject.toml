@@ -84,6 +84,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ANN", "S", "PLR", "ARG", "SLF001", "PLR2004"]
+# FastAPI's documented DI pattern calls Depends() in default arguments.
+"src/dhuan/api/*" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

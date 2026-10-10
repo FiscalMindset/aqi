@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from opensearchpy import AsyncOpenSearch, OpenSearch, exceptions
+from opensearchpy import OpenSearch, exceptions
 
 from dhuan.core.config import Settings, get_settings
 from dhuan.core.logging import get_logger
@@ -45,19 +45,6 @@ INDEX_MAPPINGS: dict[str, Any] = {
 def client(settings: Settings | None = None) -> OpenSearch:
     s = settings or get_settings()
     return OpenSearch(
-        hosts=[s.opensearch_endpoint],
-        http_compress=True,
-        use_ssl=s.opensearch_endpoint.startswith("https"),
-        verify_certs=s.opensearch_endpoint.startswith("https"),
-        timeout=10,
-        max_retries=3,
-        retry_on_timeout=True,
-    )
-
-
-def async_client(settings: Settings | None = None) -> AsyncOpenSearch:
-    s = settings or get_settings()
-    return AsyncOpenSearch(
         hosts=[s.opensearch_endpoint],
         http_compress=True,
         use_ssl=s.opensearch_endpoint.startswith("https"),
@@ -185,4 +172,4 @@ class SourceIndex:
             self._client = None
 
 
-__all__ = ["INDEX_MAPPINGS", "AsyncOpenSearch", "SourceIndex", "async_client", "client"]
+__all__ = ["INDEX_MAPPINGS", "SourceIndex", "client"]

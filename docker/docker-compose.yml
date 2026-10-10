@@ -1,0 +1,102 @@
+version: "3.9"
+
+name: dhuan-detective
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    container_name: dhuan-opensearch
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -E '\"status\":\"(green|yellow)\"' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks: [dhuan]
+
+  localstack:
+    image: localstack/localstack:4.3
+    container_name: dhuan-localstack
+    environment:
+      - SERVICES=dynamodb,s3,sns,ses,events,stepfunctions,cloudwatch,ssm,secretsmanager
+      - DEBUG=0
+      - PERSISTENCE=1
+      - AWS_DEFAULT_REGION=ap-south-1
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q dynamodb || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - localstack-data:/var/lib/localstack"
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    privileged: true
+    networks: [dhuan]
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: dhuan-backend
+    env_file: ../.env
+    environment:
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - OPENSEARCH_ENDPOINT=http://opensearch:9200
+      - PYTHONPATH=/app/src
+    ports:
+      - "8000:8000"
+    depends_on:
+      opensearch: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+    command: ["uvicorn", "dhuan.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ../backend/src:/app/src
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/ready').status==200 else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks: [dhuan]
+
+  seed:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: dhuan-seed
+    env_file: ../.env
+    environment:
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - OPENSEARCH_ENDPOINT=http://opensearch:9200
+    depends_on:
+      opensearch: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+    command: ["python", "-m", "dhuan.scripts.seed_local", "--all"]
+    networks: [dhuan]
+
+networks:
+  dhuan:
+    name: dhuan
+
+volumes:
+  opensearch-data:
+  localstack-data:
