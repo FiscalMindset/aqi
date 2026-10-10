@@ -18,7 +18,7 @@ from fastapi.responses import Response
 from dhuan.api.deps import aclose_clients
 from dhuan.api.errors import register_error_handlers
 from dhuan.api.middleware import ObservabilityMiddleware
-from dhuan.api.routers import health, sources, stations, status
+from dhuan.api.routers import estimate, grid, health, sources, stations, status, validation
 from dhuan.core.config import get_settings
 from dhuan.core.logging import configure_logging
 
@@ -65,6 +65,9 @@ def create_app() -> FastAPI:
     app.include_router(sources.router)
     app.include_router(stations.router)
     app.include_router(status.router)
+    app.include_router(estimate.router)
+    app.include_router(grid.router)
+    app.include_router(validation.router)
 
     if settings.demo_mode:
 

@@ -1,0 +1,141 @@
+{
+  "version": "eval-1",
+  "created_utc": "2026-10-10T20:07:03+00:00",
+  "snapshot_sha256": "95a1ef3bb46eae79c0aebbe07833226c943bde1112bc05761ea9b495ddbc3644",
+  "n_rows": 22106,
+  "stations": [
+    {
+      "location_id": 8039,
+      "rows": 7352
+    },
+    {
+      "location_id": 8118,
+      "rows": 7481
+    },
+    {
+      "location_id": 8557,
+      "rows": 7273
+    }
+  ],
+  "temporal_holdout": {
+    "n_train": 17830,
+    "n_test": 4276,
+    "mae": 26.12207131762866,
+    "rmse": 59.80052616210613,
+    "r2": 0.6276082450673302,
+    "bias": -18.337886205966758,
+    "coverage80": 0.7072029934518241,
+    "mean_width": 127.6882342599067
+  },
+  "loso_stations": [
+    {
+      "station": 8039,
+      "n_test": 7352,
+      "n_train": 14754,
+      "mae": 54.6581966232578,
+      "rmse": 223.0382485156726,
+      "r2": 0.023858982441887777,
+      "bias": 50.092215765777276,
+      "coverage80": 0.845348204570185,
+      "mean_width": 39.35636023791967
+    },
+    {
+      "station": 8118,
+      "n_test": 7481,
+      "n_train": 14625,
+      "mae": 253.69968958187496,
+      "rmse": 492.57441253743417,
+      "r2": -0.08191786931129275,
+      "bias": 233.53499042041668,
+      "coverage80": 0.5731854030209865,
+      "mean_width": 57.911646969768164
+    },
+    {
+      "station": 8557,
+      "n_test": 7273,
+      "n_train": 14833,
+      "mae": 86.5453595527096,
+      "rmse": 278.3082192012224,
+      "r2": 0.008385796691705805,
+      "bias": 79.89451651108736,
+      "coverage80": 0.8252440533479994,
+      "mean_width": 50.10448465337152
+    }
+  ],
+  "loso_mean": {
+    "n_train": 14833,
+    "n_test": 22106,
+    "mae": 131.63441525261413,
+    "rmse": 331.3069600847764,
+    "r2": -0.016557696725899722,
+    "bias": 121.17390756576044,
+    "coverage80": 0.7479258869797237,
+    "mean_width": 49.124163953686455
+  },
+  "baselines": {
+    "global-mean": {
+      "n_train": 17830,
+      "n_test": 4276,
+      "mae": 250.82159557550867,
+      "rmse": 268.523189980352,
+      "r2": -6.508507900273261,
+      "bias": -250.0032733271879,
+      "coverage80": NaN,
+      "mean_width": NaN
+    },
+    "per-station-climatology": {
+      "n_train": 17830,
+      "n_test": 4276,
+      "mae": 249.93588792690264,
+      "rmse": 307.5259256081179,
+      "r2": -8.84812415389703,
+      "bias": -249.2456507673393,
+      "coverage80": NaN,
+      "mean_width": NaN
+    },
+    "persistence-lag1h": {
+      "n_train": 17830,
+      "n_test": 4276,
+      "mae": 24.886638331985854,
+      "rmse": 72.98109483945818,
+      "r2": 0.44536050108724323,
+      "bias": -12.1209694825939,
+      "coverage80": NaN,
+      "mean_width": NaN
+    }
+  },
+  "winner": "nearest-station-baseline (persistence-lag1h)",
+  "features": [
+    "hour",
+    "hour_sin",
+    "hour_cos",
+    "dayofweek",
+    "month",
+    "month_sin",
+    "month_cos",
+    "wind_speed",
+    "wind_gust",
+    "temp_c",
+    "rh",
+    "precip",
+    "wind_dir_sin",
+    "wind_dir_cos",
+    "landfill_dist_km",
+    "landfill_count_5km",
+    "industrial_dist_km",
+    "industrial_count_5km",
+    "construction_dist_km",
+    "construction_count_5km",
+    "junction_dist_km",
+    "junction_count_5km",
+    "station_lag1",
+    "station_lag24",
+    "station_rolling6",
+    "lat",
+    "lon"
+  ],
+  "notes": [
+    "conformal radius (80% target): 28.65 ug/m3; empirical coverage on holdout: 0.800",
+    "Raw quantile p10/p90 models under-cover during rapid AQI swings; the interval served by the API is the conformal one."
+  ]
+}

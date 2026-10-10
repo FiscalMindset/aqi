@@ -68,6 +68,41 @@ class StatusOut(BaseModel):
     demo_mode: bool
 
 
+class EstimateOut(BaseModel):
+    """PM2.5 estimate with an 80% interval and full honesty block."""
+
+    lat: float
+    lon: float
+    ts_utc: str
+    pm25_low: float
+    pm25_mid: float
+    pm25_high: float
+    category: str
+    aqi_sub_index: int | None = None
+    nearest_station_pm25: float | None = None
+    nearest_station_name: str | None = None
+    data_age_seconds: float
+    stale: bool
+    model_version: str
+    served_by: str  # "model" | "nearest-station"
+    cpcb_table_version: str
+    honesty: str
+    demo_mode: bool
+
+
+class ValidationOut(BaseModel):
+    """Metrics exactly as produced by model/evaluate.py."""
+
+    version: str
+    created_utc: str
+    n_rows: int
+    temporal_holdout: dict[str, object]
+    loso_mean: dict[str, object]
+    baselines: dict[str, object]
+    winner: str
+    interval_coverage_note: str = "conformal 80% on the temporal holdout"
+
+
 class SourceOut(BaseModel):
     osm_id: str
     type: str
