@@ -1,0 +1,55 @@
+# Byte-compiled / optimized / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+.scratch/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+playwright-report/
+test-results/
+.nyc_output/
+*.tsbuildinfo
+
+# Data artifacts (large, regenerated)
+data/raw/*.csv.gz
+data/processed/*.parquet
+backend/models/*.joblib
+backend/models/*.pkl
+artifacts/
+.opensearch_data/
+localstack_data/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Secrets
+*.pem
+*.key
+!.env.example
+service-account*.json
