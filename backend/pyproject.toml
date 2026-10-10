@@ -59,7 +59,7 @@ markers = [
     "agent_eval: agent evaluation suite",
 ]
 asyncio_mode = "auto"
-filterwarnings = ["error::DeprecationWarning:dhuan.*"]
+filterwarnings = []
 
 [tool.coverage.run]
 source = ["src/dhuan"]

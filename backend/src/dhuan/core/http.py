@@ -66,7 +66,7 @@ def _retrying(policy: HttpPolicy) -> AsyncRetrying:
     return AsyncRetrying(
         stop=stop_after_attempt(policy.max_retries + 1),
         wait=wait_exponential_jitter(
-            initial=policy.base_delay_seconds, max=policy.max_delay_seconds, jitter=1.0
+            multiplier=policy.base_delay_seconds, max=policy.max_delay_seconds, jitter=1.0
         ),
         retry=retry_if_exception_type(
             (httpx.TimeoutException, httpx.NetworkError, UpstreamRetryError)
@@ -91,6 +91,58 @@ def make_client(policy: HttpPolicy, headers: dict[str, str] | None = None) -> ht
     )
 
 
+async def _single_attempt(  # noqa: PLR0917 - keeps call sites readable
+    client: httpx.AsyncClient,
+    source: str,
+    method: str,
+    url: str,
+    params: dict[str, Any] | None,
+    headers: dict[str, str] | None,
+    json: Any,
+    data: Any,
+    timeout: float | None,  # noqa: ASYNC109 - mirrors make_request override
+    attempt_no: int,
+) -> httpx.Response:
+    """One attempt: returns the response or raises UpstreamError/UpstreamRetryError."""
+    try:
+        resp = await client.request(
+            method,
+            url,
+            params=params,
+            headers=headers,
+            json=json,
+            data=data,
+            timeout=timeout,
+        )
+    except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        log_event(
+            logger, 40, "upstream_transport_error",
+            source=source, url=url, error=str(exc), attempt=attempt_no,
+        )
+        record("UpstreamErrors", 1)
+        raise UpstreamError(source, f"transport error: {exc}") from exc
+    if resp.status_code in RETRYABLE_STATUS:
+        log_event(
+            logger, 30, "upstream_retryable_status",
+            source=source, url=url, status=resp.status_code, attempt=attempt_no,
+        )
+        record("UpstreamRetries", 1)
+        raise UpstreamRetryError(resp)
+    if resp.status_code >= 400:
+        log_event(
+            logger, 40, "upstream_error_status",
+            source=source, url=url, status=resp.status_code, attempt=attempt_no,
+        )
+        record("UpstreamErrors", 1)
+        raise UpstreamError(source, "upstream error", resp.status_code)
+    record("UpstreamRequests", 1)
+    if attempt_no > 1:
+        log_event(
+            logger, 20, "upstream_recovered", source=source, url=url, attempts=attempt_no
+        )
+    return resp
+
+
 async def make_request(
     client: httpx.AsyncClient,
     policy: HttpPolicy,
@@ -104,49 +156,24 @@ async def make_request(
     data: Any = None,
     timeout: float | None = None,  # noqa: ASYNC109 - per-call override is intentional
 ) -> httpx.Response:
-    """GET/POST with timeouts, exponential backoff + jitter, logging + metrics."""
+    """GET/POST with timeouts, exponential backoff + jitter, logging + metrics.
+
+    Transport errors and retryable statuses are retried; any other 4xx/5xx
+    raises `UpstreamError` immediately; exhausted retries also surface as
+    `UpstreamError` (never as an internal signal leaking to callers).
+    """
     attempts = 0
-    async for attempt in _retrying(policy):
-        with attempt:
-            attempts += 1
-            try:
-                resp = await client.request(
-                    method,
-                    url,
-                    params=params,
-                    headers=headers,
-                    json=json,
-                    data=data,
-                    timeout=timeout,
+    try:
+        async for attempt in _retrying(policy):
+            with attempt:
+                attempts += 1
+                return await _single_attempt(
+                    client, source, method, url, params, headers, json, data, timeout, attempts
                 )
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
-                log_event(
-                    logger, 40, "upstream_transport_error",
-                    source=source, url=url, error=str(exc), attempt=attempts,
-                )
-                record("UpstreamErrors", 1)
-                raise
-            if resp.status_code in RETRYABLE_STATUS:
-                log_event(
-                    logger, 30, "upstream_retryable_status",
-                    source=source, url=url, status=resp.status_code, attempt=attempts,
-                )
-                record("UpstreamRetries", 1)
-                raise UpstreamRetryError(resp)
-            if resp.status_code >= 400:
-                log_event(
-                    logger, 40, "upstream_error_status",
-                    source=source, url=url, status=resp.status_code, attempt=attempts,
-                )
-                record("UpstreamErrors", 1)
-                raise UpstreamError(source, "upstream error", resp.status_code)
-            record("UpstreamRequests", 1)
-            if attempts > 1:
-                log_event(
-                    logger, 20, "upstream_recovered", source=source, url=url, attempts=attempts
-                )
-            return resp
-    # unreachable: AsyncRetrying always returns or raises
+    except UpstreamRetryError as retry_exc:
+        raise UpstreamError(
+            source, "retryable status persisted", retry_exc.response.status_code
+        ) from retry_exc
     raise UpstreamError(source, "exhausted retries")
 
 
