@@ -116,7 +116,7 @@ None of these three errors were in our code. Every one of them was AWS CLI or AW
 
 | | |
 |---|---|
-| **Deployed for real** | nothing yet — credentials now work (`aws login` succeeded, account `609394381612`), deploy is the next step |
+| **Deployed for real** | **yes** — stack `dhuan-detective-stg` in ap-south-1, account 609394381612 |
 | **Verified locally** | cfn-lint zero findings, ASL valid, 230 backend tests, 80 Playwright tests, live API on :8080 and web on :4173 serving real data + real OSM sources |
 | **Ready to deploy** | `sam build` → `sam deploy --config-env staging` via `cd.yml`, or by hand now that login works |
 
@@ -152,13 +152,69 @@ Expected first-run issues (we looked for these in the template):
 - **OpenSearch domain sizing** — `t3.small.search` is the demo size; prod needs a standby node.
 - **Canary rollback alarm** — the API error alarm must exist *before* the first deploy or `DeploymentPreference` fails.
 
+## Phase 5b — The deploy that actually happened
+
+```bash
+aws ecr create-repository --repository-name dhuan-backend --image-scanning-configuration scanOnPush=true
+aws s3 mb s3://dhuan-deploy-artifacts-609394381612
+sam build --template-file infra/template.yaml --use-container
+sam deploy --template-file .aws-sam/build/template.yaml \
+  --config-file infra/samconfig.toml --config-env staging \
+  --s3-bucket dhuan-deploy-artifacts-609394381612 \
+  --parameter-overrides "Environment=staging BedrockModelId=anthropic.claude-haiku-4-5-20251001-v1:0 DemoMode=true"
+```
+
+**Live now:**
+
+| What | URL |
+|---|---|
+| API base | `https://vz7mjma8sj.execute-api.ap-south-1.amazonaws.com/staging/v1` |
+| Health | `.../staging/health` |
+| Web app | `https://dhuan-detective-stg-webbucket-o2drps8axlex.s3.ap-south-1.amazonaws.com/index.html` |
+
+### What deploying found that local testing never could
+
+Nine real defects, every one invisible to `pytest` against a local uvicorn:
+
+1. **Mangum API change** — `Mangum(app).handler` existed in mangum<0.17; current
+   releases make the adapter callable itself. Every request 500'd.
+2. **API Gateway stage collision** — the stage was named `v1` and the app also
+   prefixes `/v1`, so `/staging/v1/estimate` was read as stage `v1` + path
+   `/estimate` and 404'd on every `/v1/*` route. Only `/health` worked, which
+   is exactly why this looked fine for ten minutes.
+3. **`ApiDeployment` race** — no `DependsOn` on the methods, so the deployment
+   snapshotted an empty API: *"The REST API doesn't contain any methods"*.
+4. **ASL Parallel scope** — a branch cannot transition to a sibling state, so
+   the per-branch `Catch -> RecordFeedFailure` could never resolve. Lifted the
+   Catch onto the Parallel.
+5. **ASL `Memory` on a Task** — not a field. Removed.
+6. **ASL `$.ingested[-1]`** — reference paths have no negative array index.
+7. **`DefinitionUri` does not substitute** — CloudFormation leaves
+   `${AWS::Region}` in an S3-hosted definition, so every execution died with
+   *"The resource belongs to a different region from the running execution.
+   Expected 'ap-south-1', was '${AWS"*. Fixed with `DefinitionSubstitutions`.
+8. **EventBridge target** — `!Ref` on a function gives a name, EventBridge
+   wants an ARN. The `refresh_sources` task it invoked did not exist either.
+9. **SAM build-args are not build stages** — `DockerBuildArgs: {TARGET: lambda}`
+   is passed as `--build-arg`, which selects nothing; the default (last) stage
+   was built. SAM only warned that TARGET was unconsumed.
+
+Plus three account-level gates that no amount of template correctness can fix:
+Bedrock, CloudFront and CodeDeploy all reject an unverified account. They are
+now parameters so the stack deploys without them and turns them on later.
+
 ## Phase 6 — Lessons for the next engineer
 
 1. `cfn-lint` and `sam validate` catch real bugs — run them per-change, not per-release.
 2. Credentials fail in confusing ways (`expiresIn`) — isolate them from tests.
 3. Health checks lie: poll service endpoints yourself before declaring a container up.
 4. LocalStack ≠ AWS: SNS email confirmation, SES sandboxing and CloudFront timings are only observable in the real account.
-5. AWS login errors are almost never your code — read whether the error is about
+5. Local tests cannot see the integration layer. Mangum, API Gateway stage
+   naming, deployment ordering and ASL schema are all runtime-only failures.
+   Deploy to a throwaway stack early.
+6. Account-level gates (unverified account, service subscriptions) masquerade
+   as code bugs. Read the error text before editing YAML.
+7. AWS login errors are almost never your code — read whether the error is about
    *your input* (empty code → `NoneType`) or the *code*; only the latter is a bug here.
 6. `sam validate --lint` catches transform-level errors that plain `cfn-lint` misses
    (it caught the `SSM_PARAMETER_PREFIX` reference cfn-lint let through). Run both.

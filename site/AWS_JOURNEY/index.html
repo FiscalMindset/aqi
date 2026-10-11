@@ -1710,6 +1710,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#phase-5b-the-deploy-that-actually-happened" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 5b — The deploy that actually happened
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 5b — The deploy that actually happened">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-deploying-found-that-local-testing-never-could" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What deploying found that local testing never could
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#phase-6-lessons-for-the-next-engineer" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1994,6 +2022,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#phase-5b-the-deploy-that-actually-happened" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 5b — The deploy that actually happened
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 5b — The deploy that actually happened">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-deploying-found-that-local-testing-never-could" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What deploying found that local testing never could
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#phase-6-lessons-for-the-next-engineer" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2166,7 +2222,7 @@
 <tbody>
 <tr>
 <td><strong>Deployed for real</strong></td>
-<td>nothing yet — credentials now work (<code>aws login</code> succeeded, account <code>609394381612</code>), deploy is the next step</td>
+<td><strong>yes</strong> — stack <code>dhuan-detective-stg</code> in ap-south-1, account 609394381612</td>
 </tr>
 <tr>
 <td><strong>Verified locally</strong></td>
@@ -2206,12 +2262,78 @@
 - <strong>SES is sandboxed by default</strong> — SNS email subscriptions need a verified identity or a support request; the code logs a warning and stores the subscription anyway.
 - <strong>OpenSearch domain sizing</strong> — <code>t3.small.search</code> is the demo size; prod needs a standby node.
 - <strong>Canary rollback alarm</strong> — the API error alarm must exist <em>before</em> the first deploy or <code>DeploymentPreference</code> fails.</p>
+<h2 id="phase-5b-the-deploy-that-actually-happened">Phase 5b — The deploy that actually happened<a class="headerlink" href="#phase-5b-the-deploy-that-actually-happened" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aws<span class="w"> </span>ecr<span class="w"> </span>create-repository<span class="w"> </span>--repository-name<span class="w"> </span>dhuan-backend<span class="w"> </span>--image-scanning-configuration<span class="w"> </span><span class="nv">scanOnPush</span><span class="o">=</span><span class="nb">true</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>aws<span class="w"> </span>s3<span class="w"> </span>mb<span class="w"> </span>s3://dhuan-deploy-artifacts-609394381612
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>sam<span class="w"> </span>build<span class="w"> </span>--template-file<span class="w"> </span>infra/template.yaml<span class="w"> </span>--use-container
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>sam<span class="w"> </span>deploy<span class="w"> </span>--template-file<span class="w"> </span>.aws-sam/build/template.yaml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--config-file<span class="w"> </span>infra/samconfig.toml<span class="w"> </span>--config-env<span class="w"> </span>staging<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--s3-bucket<span class="w"> </span>dhuan-deploy-artifacts-609394381612<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--parameter-overrides<span class="w"> </span><span class="s2">"Environment=staging BedrockModelId=anthropic.claude-haiku-4-5-20251001-v1:0 DemoMode=true"</span>
+</code></pre></div>
+<p><strong>Live now:</strong></p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>URL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API base</td>
+<td><code>https://vz7mjma8sj.execute-api.ap-south-1.amazonaws.com/staging/v1</code></td>
+</tr>
+<tr>
+<td>Health</td>
+<td><code>.../staging/health</code></td>
+</tr>
+<tr>
+<td>Web app</td>
+<td><code>https://dhuan-detective-stg-webbucket-o2drps8axlex.s3.ap-south-1.amazonaws.com/index.html</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-deploying-found-that-local-testing-never-could">What deploying found that local testing never could<a class="headerlink" href="#what-deploying-found-that-local-testing-never-could" title="Permanent link">&para;</a></h3>
+<p>Nine real defects, every one invisible to <code>pytest</code> against a local uvicorn:</p>
+<ol>
+<li><strong>Mangum API change</strong> — <code>Mangum(app).handler</code> existed in mangum&lt;0.17; current
+   releases make the adapter callable itself. Every request 500'd.</li>
+<li><strong>API Gateway stage collision</strong> — the stage was named <code>v1</code> and the app also
+   prefixes <code>/v1</code>, so <code>/staging/v1/estimate</code> was read as stage <code>v1</code> + path
+   <code>/estimate</code> and 404'd on every <code>/v1/*</code> route. Only <code>/health</code> worked, which
+   is exactly why this looked fine for ten minutes.</li>
+<li><strong><code>ApiDeployment</code> race</strong> — no <code>DependsOn</code> on the methods, so the deployment
+   snapshotted an empty API: <em>"The REST API doesn't contain any methods"</em>.</li>
+<li><strong>ASL Parallel scope</strong> — a branch cannot transition to a sibling state, so
+   the per-branch <code>Catch -&gt; RecordFeedFailure</code> could never resolve. Lifted the
+   Catch onto the Parallel.</li>
+<li><strong>ASL <code>Memory</code> on a Task</strong> — not a field. Removed.</li>
+<li><strong>ASL <code>$.ingested[-1]</code></strong> — reference paths have no negative array index.</li>
+<li><strong><code>DefinitionUri</code> does not substitute</strong> — CloudFormation leaves
+   <code>${AWS::Region}</code> in an S3-hosted definition, so every execution died with
+   <em>"The resource belongs to a different region from the running execution.
+   Expected 'ap-south-1', was '${AWS"</em>. Fixed with <code>DefinitionSubstitutions</code>.</li>
+<li><strong>EventBridge target</strong> — <code>!Ref</code> on a function gives a name, EventBridge
+   wants an ARN. The <code>refresh_sources</code> task it invoked did not exist either.</li>
+<li><strong>SAM build-args are not build stages</strong> — <code>DockerBuildArgs: {TARGET: lambda}</code>
+   is passed as <code>--build-arg</code>, which selects nothing; the default (last) stage
+   was built. SAM only warned that TARGET was unconsumed.</li>
+</ol>
+<p>Plus three account-level gates that no amount of template correctness can fix:
+Bedrock, CloudFront and CodeDeploy all reject an unverified account. They are
+now parameters so the stack deploys without them and turns them on later.</p>
 <h2 id="phase-6-lessons-for-the-next-engineer">Phase 6 — Lessons for the next engineer<a class="headerlink" href="#phase-6-lessons-for-the-next-engineer" title="Permanent link">&para;</a></h2>
 <ol>
 <li><code>cfn-lint</code> and <code>sam validate</code> catch real bugs — run them per-change, not per-release.</li>
 <li>Credentials fail in confusing ways (<code>expiresIn</code>) — isolate them from tests.</li>
 <li>Health checks lie: poll service endpoints yourself before declaring a container up.</li>
 <li>LocalStack ≠ AWS: SNS email confirmation, SES sandboxing and CloudFront timings are only observable in the real account.</li>
+<li>Local tests cannot see the integration layer. Mangum, API Gateway stage
+   naming, deployment ordering and ASL schema are all runtime-only failures.
+   Deploy to a throwaway stack early.</li>
+<li>Account-level gates (unverified account, service subscriptions) masquerade
+   as code bugs. Read the error text before editing YAML.</li>
 <li>AWS login errors are almost never your code — read whether the error is about
    <em>your input</em> (empty code → <code>NoneType</code>) or the <em>code</em>; only the latter is a bug here.</li>
 <li><code>sam validate --lint</code> catches transform-level errors that plain <code>cfn-lint</code> misses
