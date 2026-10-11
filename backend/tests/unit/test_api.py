@@ -133,3 +133,65 @@ def test_unhandled_route_404_is_problem(api: TestClient) -> None:
     resp = api.get("/v1/does-not-exist")
     assert resp.status_code == 404
     assert resp.headers["content-type"].startswith("application/problem+json")
+
+
+def test_validation_endpoint_serves_generated_metrics(api: TestClient) -> None:
+    resp = api.get("/v1/validation")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["n_rows"] > 1000
+    assert "temporal_holdout" in body
+    assert body["winner"]
+    # the UI must be able to tell which producer shipped
+    assert body["baselines"]["persistence-lag1h"]["mae"] > 0
+
+
+def test_grid_endpoint_returns_geojson_with_etag(api: TestClient) -> None:
+    resp = api.get("/v1/grid", params={"simplify": True})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/geo+json")
+    assert resp.headers.get("etag")
+    again = api.get("/v1/grid", params={"simplify": True}, headers={"If-None-Match": resp.headers["etag"]})
+    assert again.status_code == 304
+
+
+def test_explain_rejects_outside_coverage(api: TestClient) -> None:
+    resp = api.post("/v1/explain", json={"lat": 19.076, "lon": 72.877})
+    assert resp.status_code == 422
+    assert resp.headers["content-type"].startswith("application/problem+json")
+
+
+def test_explain_runs_deterministic_agent(
+    api: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dhuan.core import config
+
+    monkeypatch.setenv("DEMO_MODE", "1")
+    config.get_settings.cache_clear()
+    resp = api.post("/v1/explain", json={"lat": 28.6139, "lon": 77.2090})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["served_by"] == "scripted-deterministic"
+    attr = body["attribution"]
+    assert attr["summary"]
+    assert attr["evidence"], "attribution must carry tool evidence"
+    ids = {e["evidence_id"] for e in attr["evidence"]}
+    for cause in attr["likely_causes"]:
+        assert set(cause["evidence_ids"]) <= ids, "every claim cites a real evidence id"
+    assert "likely" in attr["summary"].lower()
+    assert {a["persona"] for a in body["advice"]} >= {"parent", "rider", "worker"}
+    for a in body["advice"]:
+        assert a["disclaimer"]
+
+
+def test_estimate_endpoint_demo_mode(api: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from dhuan.core import config
+
+    monkeypatch.setenv("DEMO_MODE", "1")
+    config.get_settings.cache_clear()
+    resp = api.get("/v1/estimate", params={"lat": 28.6139, "lon": 77.2090})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["pm25_low"] <= body["pm25_mid"] <= body["pm25_high"]
+    assert body["honesty"].startswith("Estimate, not a measurement")
+    assert body["demo_mode"] is True
