@@ -26,7 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 agents = [
-    "strands-agents>=0.1,<1.0",
+    "strands-agents>=0.1,<2.0",
 ]
 dev = [
     "pytest>=8.2,<9.0",
