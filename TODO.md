@@ -4,7 +4,7 @@ Single source of truth for what is in flight. Structural history lives in `TASKS
 
 ## In progress
 
-- [ ] Push repositories: set two remotes — private `FiscalMindset/dhuan`, public `FiscalMindset/aqi` — and push `main` to both.
+- [ ] CI workflows (ci.yml with all section-7 jobs, cd.yml with OIDC + canary)
 
 ## Backlog (remaining phase-8 items)
 
@@ -22,6 +22,8 @@ Single source of truth for what is in flight. Structural history lives in `TASKS
 
 ## Done (recent)
 
+- [x] Pushed to GitHub: public https://github.com/FiscalMindset/aqi and private
+      https://github.com/FiscalMindset/dhuan, both on `main`
 - [x] Live stack running: API on 127.0.0.1:8080 (demo mode), web on 127.0.0.1:4173
 - [x] Real bugs fixed from the live run: estimate-tool `Depends` leak, evidence raw-result drop, CORS demo-banner header, map init error state
 - [x] Docs: README, ARCHITECTURE, AWS, ALGORITHM, MODEL, BACKEND, FRONTEND, GRADIENT_BOOSTING, DATA_COLLECTION, RULES, TECHNOLOGY_STACK, AGENTS_DESIGN, MODEL_CARD
