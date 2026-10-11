@@ -1,0 +1,94 @@
+import { useTranslation } from "react-i18next";
+import { categoryIcon, CATEGORY_COLORS, onColor } from "../../lib/aqi";
+import type { Estimate } from "../../lib/api";
+
+/** The estimate card: value, interval, category, station, age, honesty. */
+export function EstimatePanel({
+  estimate,
+  loading,
+  error,
+  compact = false,
+}: {
+  estimate?: Estimate;
+  loading: boolean;
+  error?: Error | null;
+  compact?: boolean;
+}) {
+  const { t } = useTranslation();
+  if (loading) return <div className="skeleton h-24 rounded bg-white/5" aria-busy="true" />;
+  if (error)
+    return (
+      <div role="alert" className="p-3 rounded bg-red-950/60 text-sm">
+        {t("explorer.error")}
+      </div>
+    );
+  if (!estimate) return null;
+
+  const color = CATEGORY_COLORS[estimate.category] ?? "#64748b";
+  const ageMinutes = Math.round(estimate.data_age_seconds / 60);
+
+  return (
+    <section aria-labelledby="estimate-heading" data-testid="estimate-panel">
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <h2 id="estimate-heading" className="text-sm text-slate-300">
+          {t("explorer.estimate")}
+        </h2>
+        {/* value stays high-contrast; the category chip carries the color, always
+            paired with the icon (never color alone) */}
+        <span data-testid="estimate-value" className="text-3xl font-bold text-white">
+          {categoryIcon(estimate.category)} {estimate.pm25_mid.toFixed(0)}
+        </span>
+        <span className="text-sm text-slate-400">µg/m³</span>
+        <span
+          className="text-xs px-2 py-1 rounded-full font-semibold"
+          style={{ backgroundColor: color, color: onColor(estimate.category) }}
+        >
+          {t(`categories.${estimate.category}` as never)}
+        </span>
+      </div>
+      <p className="text-sm text-slate-400 mt-1">
+        {t("explorer.interval")}: {estimate.pm25_low.toFixed(0)} – {estimate.pm25_high.toFixed(0)}
+      </p>
+      <p className="text-xs text-slate-400 mt-1" data-testid="honesty">
+        {t("explorer.honesty")} {estimate.honesty}
+      </p>
+      {estimate.stale && (
+        <p className="text-xs text-amber-300 mt-1" role="status">
+          {t("explorer.stale")}
+        </p>
+      )}
+      {!compact && (
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <dt className="text-slate-400">{t("explorer.station")}</dt>
+            <dd data-testid="station-reading">
+              {estimate.nearest_station_name ?? "—"}
+              {estimate.nearest_station_pm25
+                ? ` — ${estimate.nearest_station_pm25.toFixed(0)} µg/m³`
+                : ""}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-400">{t("explorer.dataAge")}</dt>
+            <dd>
+              {ageMinutes < 60
+                ? t("explorer.minutesAgo", { count: ageMinutes })
+                : t("explorer.hoursAgo", { count: Math.round(ageMinutes / 60) })}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-400">{t("explorer.servedBy")}</dt>
+            <dd data-testid="served-by">{estimate.served_by}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-400">{t("explorer.modelVersion")}</dt>
+            <dd>{estimate.model_version}</dd>
+          </div>
+        </dl>
+      )}
+      {estimate.demo_mode && (
+        <p className="text-xs text-amber-300 mt-1">{t("demo.banner")}</p>
+      )}
+    </section>
+  );
+}

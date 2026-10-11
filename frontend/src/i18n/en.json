@@ -1,0 +1,128 @@
+{
+  "app": {
+    "name": "Dhuan Detective"
+  },
+  "nav": {
+    "explorer": "Explorer",
+    "routes": "Cleanest route",
+    "how": "How it works",
+    "method": "Methodology",
+    "status": "Status",
+    "subscribe": "Alerts"
+  },
+  "demo": {
+    "banner": "DEMO DATA — this is a recorded example, not a live measurement."
+  },
+  "offline": {
+    "banner": "You are offline. Showing the last saved result; reconnect for fresh estimates."
+  },
+  "explorer": {
+    "title": "Why is the air bad here right now?",
+    "search": "Search a place in Delhi-NCR",
+    "searchPlaceholder": "e.g. Rohini, Karol Bagh, Lajpat Nagar",
+    "useLocation": "Use my location",
+    "locating": "Finding you…",
+    "locationDenied": "Location permission denied. Search for a place instead.",
+    "estimate": "Estimated PM2.5",
+    "interval": "80% range",
+    "station": "Nearest official station",
+    "category": "CPCB category",
+    "dataAge": "Data age",
+    "modelVersion": "Model version",
+    "servedBy": "Produced by",
+    "honesty": "Estimate, not a measurement.",
+    "stale": "Stale data (serving last good values)",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} h ago",
+    "likelyCauses": "Likely causes",
+    "causesDisclaimer": "Heuristic ranking of candidates, not a causal proof.",
+    "evidence": "Evidence",
+    "howAgentHere": "How the agent got here",
+    "toolCall": "Tool call",
+    "noCauses": "No specific sources stand out upwind.",
+    "personas": "What this means for you",
+    "subscribeCta": "Get alerts for this area",
+    "share": "Share this view",
+    "wind": "Wind",
+    "loading": "Estimating street-level air…",
+    "error": "Could not load the estimate. Retry.",
+    "retry": "Retry",
+    "outside": "This point is outside our Delhi-NCR coverage. Try a place in Delhi-NCR."
+  },
+  "categories": {
+    "Good": "Good",
+    "Satisfactory": "Satisfactory",
+    "Moderately Polluted": "Moderately polluted",
+    "Poor": "Poor",
+    "Very Poor": "Very Poor",
+    "Severe": "Severe"
+  },
+  "personas": {
+    "parent": "For parents",
+    "rider": "For delivery riders",
+    "worker": "For outdoor workers",
+    "general": "For everyone"
+  },
+  "routes": {
+    "title": "Cleanest route",
+    "from": "From",
+    "to": "To",
+    "compare": "Compare routes",
+    "exposure": "Exposure",
+    "duration": "Duration",
+    "cleanest": "Cleanest",
+    "noRoutes": "No route alternatives found.",
+    "mode": "Mode",
+    "walking": "Walking",
+    "cycling": "Cycling",
+    "driving": "Driving"
+  },
+  "subscribe": {
+    "title": "Air-quality alerts",
+    "intro": "Get an email when the estimated air at your locality crosses your chosen category.",
+    "email": "Email",
+    "locality": "Locality name",
+    "threshold": "Alert when air is",
+    "submit": "Subscribe",
+    "submitting": "Subscribing…",
+    "success": "Check your inbox: alerts start after confirmation.",
+    "idempotent": "You are already subscribed to this locality.",
+    "unsubscribe": "Unsubscribe",
+    "outsideError": "Alerts are available for Delhi-NCR only."
+  },
+  "how": {
+    "title": "How Dhuan Detective works",
+    "step": "Step {{n}}",
+    "next": "Next",
+    "prev": "Back",
+    "of": "of",
+    "start": "Start the walkthrough",
+    "restart": "Restart"
+  },
+  "methodology": {
+    "title": "Methodology and honest limits",
+    "validation": "Validation (from the evaluation run)",
+    "holdout": "Temporal holdout",
+    "loso": "Leave-one-station-out",
+    "baselines": "Baselines",
+    "winner": "Shipped estimator",
+    "mae": "MAE (µg/m³)",
+    "rmse": "RMSE (µg/m³)",
+    "r2": "R²",
+    "bias": "Bias",
+    "coverage": "80% coverage",
+    "sources": "Data sources",
+    "limits": "Limitations",
+    "model": "Model"
+  },
+  "status": {
+    "title": "System status",
+    "feeds": "Data feeds",
+    "fresh": "fresh",
+    "stale": "stale",
+    "never": "never reported",
+    "unavailable": "unavailable",
+    "ok": "All systems nominal",
+    "degraded": "Some feeds are degraded — estimates may be stale"
+  }
+}
