@@ -1,0 +1,1454 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Dhuan Detective",
+    "description": "\n**Dhuan Detective API** \u2014 street-level PM2.5 estimation, upwind source\nattribution and plain-language advice for Delhi-NCR.\n\nEvery estimate is a model *estimate* with an uncertainty interval, never a\nmeasurement. Every response reports data age; stale data is served explicitly\nrather than invented.\n",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Liveness probe",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Service is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Readiness probe",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Per-component readiness breakdown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Pollution sources near a point, optionally upwind-filtered",
+        "operationId": "sources_v1_sources_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90,
+              "minimum": -90,
+              "description": "Latitude (WGS84)",
+              "title": "Lat"
+            },
+            "description": "Latitude (WGS84)"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180,
+              "minimum": -180,
+              "description": "Longitude (WGS84)",
+              "title": "Lon"
+            },
+            "description": "Longitude (WGS84)"
+          },
+          {
+            "name": "radius_km",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 50,
+              "minimum": 0.1,
+              "description": "Search radius in km",
+              "default": 15.0,
+              "title": "Radius Km"
+            },
+            "description": "Search radius in km"
+          },
+          {
+            "name": "upwind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only sources within the upwind cone",
+              "default": true,
+              "title": "Upwind"
+            },
+            "description": "Only sources within the upwind cone"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Settings"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Settings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ranked candidate sources with distance, bearing and influence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stations": {
+      "get": {
+        "tags": [
+          "stations"
+        ],
+        "summary": "Nearest CPCB/OpenAQ stations with latest PM2.5",
+        "operationId": "stations_v1_stations_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90,
+              "minimum": -90,
+              "description": "Latitude",
+              "title": "Lat"
+            },
+            "description": "Latitude"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180,
+              "minimum": -180,
+              "description": "Longitude",
+              "title": "Lon"
+            },
+            "description": "Longitude"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "Maximum stations",
+              "default": 10,
+              "title": "Limit"
+            },
+            "description": "Maximum stations"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stations ordered by distance, with reading age and category.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StationOut"
+                  },
+                  "title": "Response Stations V1 Stations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "System status: feed freshness, versions, coverage",
+        "operationId": "status_v1_status_get",
+        "responses": {
+          "200": {
+            "description": "Feed records, model/API versions and coverage bounds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/estimate": {
+      "get": {
+        "tags": [
+          "estimate"
+        ],
+        "summary": "PM2.5 estimate with 80% interval for a point in Delhi-NCR",
+        "operationId": "estimate_v1_estimate_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180,
+              "minimum": -180,
+              "title": "Lon"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estimate, interval, category, nearest station, freshness.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/grid": {
+      "get": {
+        "tags": [
+          "grid"
+        ],
+        "summary": "Latest H3 res-8 grid for Delhi-NCR as GeoJSON",
+        "operationId": "grid_v1_grid_get",
+        "parameters": [
+          {
+            "name": "simplify",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Omit per-cell polylines (ids only)",
+              "default": false,
+              "title": "Simplify"
+            },
+            "description": "Omit per-cell polylines (ids only)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoJSON FeatureCollection of grid cells (ETag cached).",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/validation": {
+      "get": {
+        "tags": [
+          "validation"
+        ],
+        "summary": "Latest evaluation metrics generated by model/evaluate.py",
+        "operationId": "validation_v1_validation_get",
+        "responses": {
+          "200": {
+            "description": "Temporal holdout, LOSO, baselines and the shipped winner.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/explain": {
+      "post": {
+        "tags": [
+          "explain"
+        ],
+        "summary": "Explain the air at a point: likely causes with visible evidence",
+        "operationId": "explain_route_v1_explain_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Attribution result, persona advice, tool-call trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Explain Route V1 Explain Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subscriptions": {
+      "post": {
+        "tags": [
+          "subscriptions"
+        ],
+        "summary": "Subscribe to air-quality alerts for a locality",
+        "operationId": "create_subscription_v1_subscriptions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created (or already existing) subscription id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Subscription V1 Subscriptions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subscriptions/confirm": {
+      "get": {
+        "tags": [
+          "subscriptions"
+        ],
+        "summary": "Confirm a subscription from the email link",
+        "operationId": "confirm_subscription_v1_subscriptions_confirm_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 4,
+              "title": "Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 4,
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Confirm Subscription V1 Subscriptions Confirm Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subscriptions/{id}": {
+      "delete": {
+        "tags": [
+          "subscriptions"
+        ],
+        "summary": "Unsubscribe (immediate, no confirmation email needed)",
+        "operationId": "delete_subscription_v1_subscriptions__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Subscription V1 Subscriptions  Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Bbox": {
+        "properties": {
+          "min_lat": {
+            "type": "number",
+            "title": "Min Lat"
+          },
+          "min_lon": {
+            "type": "number",
+            "title": "Min Lon"
+          },
+          "max_lat": {
+            "type": "number",
+            "title": "Max Lat"
+          },
+          "max_lon": {
+            "type": "number",
+            "title": "Max Lon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_lat",
+          "min_lon",
+          "max_lat",
+          "max_lon"
+        ],
+        "title": "Bbox",
+        "description": "An inclusive bounding box, min == south/west, max == north/east."
+      },
+      "EstimateOut": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "ts_utc": {
+            "type": "string",
+            "title": "Ts Utc"
+          },
+          "pm25_low": {
+            "type": "number",
+            "title": "Pm25 Low"
+          },
+          "pm25_mid": {
+            "type": "number",
+            "title": "Pm25 Mid"
+          },
+          "pm25_high": {
+            "type": "number",
+            "title": "Pm25 High"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "aqi_sub_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aqi Sub Index"
+          },
+          "nearest_station_pm25": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Station Pm25"
+          },
+          "nearest_station_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Station Name"
+          },
+          "data_age_seconds": {
+            "type": "number",
+            "title": "Data Age Seconds"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "served_by": {
+            "type": "string",
+            "title": "Served By"
+          },
+          "cpcb_table_version": {
+            "type": "string",
+            "title": "Cpcb Table Version"
+          },
+          "honesty": {
+            "type": "string",
+            "title": "Honesty"
+          },
+          "demo_mode": {
+            "type": "boolean",
+            "title": "Demo Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon",
+          "ts_utc",
+          "pm25_low",
+          "pm25_mid",
+          "pm25_high",
+          "category",
+          "data_age_seconds",
+          "stale",
+          "model_version",
+          "served_by",
+          "cpcb_table_version",
+          "honesty",
+          "demo_mode"
+        ],
+        "title": "EstimateOut",
+        "description": "PM2.5 estimate with an 80% interval and full honesty block."
+      },
+      "ExplainRequest": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "ExplainRequest"
+      },
+      "FeedStatusOut": {
+        "properties": {
+          "feed": {
+            "type": "string",
+            "title": "Feed"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "records_last_run": {
+            "type": "integer",
+            "title": "Records Last Run",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "feed",
+          "ok",
+          "last_success_at",
+          "age_seconds"
+        ],
+        "title": "FeedStatusOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "demo_mode": {
+            "type": "boolean",
+            "title": "Demo Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "demo_mode"
+        ],
+        "title": "HealthOut"
+      },
+      "ReadyCheck": {
+        "properties": {
+          "component": {
+            "type": "string",
+            "title": "Component"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "component",
+          "ok",
+          "detail"
+        ],
+        "title": "ReadyCheck"
+      },
+      "ReadyOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/ReadyCheck"
+            },
+            "type": "array",
+            "title": "Checks"
+          },
+          "demo_mode": {
+            "type": "boolean",
+            "title": "Demo Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "checks",
+          "demo_mode"
+        ],
+        "title": "ReadyOut"
+      },
+      "Settings": {
+        "properties": {
+          "env": {
+            "type": "string",
+            "enum": [
+              "dev",
+              "staging",
+              "prod",
+              "test"
+            ],
+            "title": "Env",
+            "default": "dev"
+          },
+          "demo_mode": {
+            "type": "boolean",
+            "title": "Demo Mode",
+            "default": false
+          },
+          "log_level": {
+            "type": "string",
+            "title": "Log Level",
+            "default": "INFO"
+          },
+          "api_host": {
+            "type": "string",
+            "title": "Api Host",
+            "default": "0.0.0.0"
+          },
+          "api_port": {
+            "type": "integer",
+            "title": "Api Port",
+            "default": 8000
+          },
+          "api_version": {
+            "type": "string",
+            "title": "Api Version",
+            "default": "0.1.0"
+          },
+          "service_name": {
+            "type": "string",
+            "title": "Service Name",
+            "default": "dhuan-detective"
+          },
+          "openaq_api_key": {
+            "type": "string",
+            "title": "Openaq Api Key",
+            "default": ""
+          },
+          "openmeteo_base_url": {
+            "type": "string",
+            "title": "Openmeteo Base Url",
+            "default": "https://api.open-meteo.com"
+          },
+          "openmeteo_aq_base_url": {
+            "type": "string",
+            "title": "Openmeteo Aq Base Url",
+            "default": "https://air-quality-api.open-meteo.com"
+          },
+          "firms_map_key": {
+            "type": "string",
+            "title": "Firms Map Key",
+            "default": ""
+          },
+          "overpass_endpoints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Overpass Endpoints"
+          },
+          "http_timeout_seconds": {
+            "type": "number",
+            "title": "Http Timeout Seconds",
+            "default": 10.0
+          },
+          "http_connect_timeout_seconds": {
+            "type": "number",
+            "title": "Http Connect Timeout Seconds",
+            "default": 5.0
+          },
+          "http_max_retries": {
+            "type": "integer",
+            "title": "Http Max Retries",
+            "default": 3
+          },
+          "http_retry_base_delay_seconds": {
+            "type": "number",
+            "title": "Http Retry Base Delay Seconds",
+            "default": 0.5
+          },
+          "http_retry_max_delay_seconds": {
+            "type": "number",
+            "title": "Http Retry Max Delay Seconds",
+            "default": 8.0
+          },
+          "aws_region": {
+            "type": "string",
+            "title": "Aws Region",
+            "default": "ap-south-1"
+          },
+          "aws_endpoint_url": {
+            "type": "string",
+            "title": "Aws Endpoint Url",
+            "default": ""
+          },
+          "bedrock_model_id": {
+            "type": "string",
+            "title": "Bedrock Model Id",
+            "default": ""
+          },
+          "opensearch_endpoint": {
+            "type": "string",
+            "title": "Opensearch Endpoint",
+            "default": "http://localhost:9200"
+          },
+          "opensearch_index": {
+            "type": "string",
+            "title": "Opensearch Index",
+            "default": "sources"
+          },
+          "dynamodb_table_estimates": {
+            "type": "string",
+            "title": "Dynamodb Table Estimates",
+            "default": "dhuan-estimates"
+          },
+          "dynamodb_table_feeds": {
+            "type": "string",
+            "title": "Dynamodb Table Feeds",
+            "default": "dhuan-feeds"
+          },
+          "dynamodb_table_subscriptions": {
+            "type": "string",
+            "title": "Dynamodb Table Subscriptions",
+            "default": "dhuan-subscriptions"
+          },
+          "s3_bucket": {
+            "type": "string",
+            "title": "S3 Bucket",
+            "default": "dhuan-artifacts"
+          },
+          "sns_topic_arn": {
+            "type": "string",
+            "title": "Sns Topic Arn",
+            "default": ""
+          },
+          "ssm_parameter_prefix": {
+            "type": "string",
+            "title": "Ssm Parameter Prefix",
+            "default": "/dhuan"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version",
+            "default": "baseline-v1"
+          },
+          "h3_resolution": {
+            "type": "integer",
+            "title": "H3 Resolution",
+            "default": 8
+          },
+          "delhi_bbox": {
+            "$ref": "#/components/schemas/Bbox",
+            "default": {
+              "min_lat": 28.38,
+              "min_lon": 76.83,
+              "max_lat": 28.92,
+              "max_lon": 77.36
+            }
+          },
+          "sms_enabled": {
+            "type": "boolean",
+            "title": "Sms Enabled",
+            "default": false
+          },
+          "cors_origins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cors Origins"
+          },
+          "demo_data_dir": {
+            "type": "string",
+            "title": "Demo Data Dir",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Settings"
+      },
+      "SourceOut": {
+        "properties": {
+          "osm_id": {
+            "type": "string",
+            "title": "Osm Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "bearing_deg": {
+            "type": "number",
+            "title": "Bearing Deg"
+          },
+          "in_upwind_cone": {
+            "type": "boolean",
+            "title": "In Upwind Cone"
+          },
+          "influence_score": {
+            "type": "number",
+            "title": "Influence Score"
+          },
+          "area_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area M2"
+          },
+          "attribution": {
+            "type": "string",
+            "title": "Attribution",
+            "default": "\u00a9 OpenStreetMap contributors (ODbL)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "osm_id",
+          "type",
+          "name",
+          "latitude",
+          "longitude",
+          "distance_km",
+          "bearing_deg",
+          "in_upwind_cone",
+          "influence_score"
+        ],
+        "title": "SourceOut"
+      },
+      "SourcesResponse": {
+        "properties": {
+          "query": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Query"
+          },
+          "wind_from_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind From Deg"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "openness_note": {
+            "type": "string",
+            "title": "Openness Note",
+            "default": "Influence scores are a transparent heuristic for ranking candidates, not a causal attribution."
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "count",
+          "sources"
+        ],
+        "title": "SourcesResponse"
+      },
+      "StationOut": {
+        "properties": {
+          "station_id": {
+            "type": "string",
+            "title": "Station Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "pm25": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pm25"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "Severe",
+                  "Very Poor",
+                  "Poor",
+                  "Moderately Polluted",
+                  "Satisfactory",
+                  "Good"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        "type": "object",
+        "required": [
+          "station_id",
+          "name",
+          "latitude",
+          "longitude",
+          "provider",
+          "distance_km"
+        ],
+        "title": "StationOut"
+      },
+      "StatusOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "api_version": {
+            "type": "string",
+            "title": "Api Version"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "feeds": {
+            "items": {
+              "$ref": "#/components/schemas/FeedStatusOut"
+            },
+            "type": "array",
+            "title": "Feeds"
+          },
+          "coverage": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Coverage"
+          },
+          "demo_mode": {
+            "type": "boolean",
+            "title": "Demo Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "api_version",
+          "model_version",
+          "feeds",
+          "coverage",
+          "demo_mode"
+        ],
+        "title": "StatusOut"
+      },
+      "SubscriptionRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "locality": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Locality"
+          },
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon"
+          },
+          "threshold_category": {
+            "type": "string",
+            "title": "Threshold Category",
+            "default": "Poor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "locality",
+          "lat",
+          "lon"
+        ],
+        "title": "SubscriptionRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ValidationOut": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "created_utc": {
+            "type": "string",
+            "title": "Created Utc"
+          },
+          "n_rows": {
+            "type": "integer",
+            "title": "N Rows"
+          },
+          "temporal_holdout": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Temporal Holdout"
+          },
+          "loso_mean": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Loso Mean"
+          },
+          "baselines": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Baselines"
+          },
+          "winner": {
+            "type": "string",
+            "title": "Winner"
+          },
+          "interval_coverage_note": {
+            "type": "string",
+            "title": "Interval Coverage Note",
+            "default": "conformal 80% on the temporal holdout"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "created_utc",
+          "n_rows",
+          "temporal_holdout",
+          "loso_mean",
+          "baselines",
+          "winner"
+        ],
+        "title": "ValidationOut",
+        "description": "Metrics exactly as produced by model/evaluate.py."
+      }
+    }
+  }
+}
