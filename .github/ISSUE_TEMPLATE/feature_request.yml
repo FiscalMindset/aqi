@@ -1,0 +1,19 @@
+name: Feature request
+description: A new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: Problem, description: What user need does this serve }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: Proposed change }
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Brief compliance
+      options:
+        - label: "Rule 1: no fake data / demo banner if applicable"
+        - label: "Rule 2: full production checklist for any new route"
+        - label: "Rule 3: fail soft, never invent values"

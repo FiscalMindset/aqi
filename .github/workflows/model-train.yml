@@ -1,0 +1,38 @@
+name: Model training
+
+on:
+  schedule:
+    - cron: "0 4 1 * *"   # monthly, 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  train:
+    name: Train + evaluate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project backend --extra dev
+      - name: Fetch latest snapshot
+        run: uv run --project backend python scripts/fetch_training_data.py
+      - name: Train
+        run: cd backend && uv run python -m dhuan.model.train
+      - name: Regenerate model card
+        run: cd backend && uv run python -m dhuan.model.evaluate
+      - name: Model gates
+        run: cd backend && uv run pytest tests/model -q
+      - name: Open PR with metrics + card
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "feat(model): monthly retrain"
+          title: "Monthly model retrain (auto)"
+          body-path: backend/models/metrics.json
+          branch: auto/monthly-retrain
+          add-paths: |
+            backend/models/metrics.json
+            docs/MODEL_CARD.md

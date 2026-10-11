@@ -1,0 +1,84 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test-gate:
+    name: Test gate
+    uses: ./.github/workflows/ci.yml
+    if: false # placeholder: real gate uses the required CI checks
+
+  deploy-staging:
+    name: Deploy staging
+    needs: [test-gate]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: aws/setup-sam@v4
+      - name: sam build
+        run: sam build --template infra/template.yaml --use-container
+      - name: sam deploy (staging)
+        run: |
+          sam deploy \
+            --config-file infra/samconfig.toml \
+            --config-env staging \
+            --no-confirm-changeset \
+            --parameter-overrides "Environment=staging BedrockModelId=${{ secrets.BEDROCK_MODEL_ID }}"
+      - name: Smoke test
+        run: python scripts/smoke.py --env staging
+      - name: Frontend build + upload
+        run: |
+          cd frontend && npm ci && npm run build
+          aws s3 sync dist s3://${{ secrets.STAGING_WEB_BUCKET }} --delete
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.STAGING_CF_ID }} --paths "/*"
+      - name: Playwright smoke against staging
+        run: |
+          cd frontend
+          E2E_BASE_URL=${{ steps.deploy.outputs.web_url }} npx playwright test tests/e2e/smoke.spec.ts
+
+  deploy-prod:
+    name: Deploy production (manual approval)
+    needs: [deploy-staging]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production   # approvers gate this in repo settings
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: aws/setup-sam@v4
+      - name: sam build + deploy
+        run: |
+          sam build --template infra/template.yaml --use-container
+          sam deploy \
+            --config-file infra/samconfig.toml \
+            --config-env prod \
+            --no-confirm-changeset \
+            --parameter-overrides "Environment=prod BedrockModelId=${{ secrets.BEDROCK_MODEL_ID }}"
+      - name: Smoke + report
+        run: |
+          WEB_URL=$(python scripts/smoke.py --env prod --url-only)
+          echo "Deployed: $WEB_URL" >> "$GITHUB_STEP_SUMMARY"
