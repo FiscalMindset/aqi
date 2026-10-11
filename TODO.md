@@ -4,27 +4,38 @@ Single source of truth for what is in flight. Structural history lives in `TASKS
 
 ## In progress
 
-- [ ] CI workflows (ci.yml with all section-7 jobs, cd.yml with OIDC + canary)
+- [ ] Verify `sam build --use-container` + a real staging deploy once AWS
+      credentials are available (everything else is green)
 
-## Backlog (remaining phase-8 items)
+## Remaining backlog
 
-- [ ] CI workflows: `ci.yml`, `cd.yml`, `model-train.yml`, `docs.yml`, `codeql.yml` (jobs: lint, types, forbidden tokens, unit, integration, contract, model, agent evals, frontend, e2e matrix, axe, Lighthouse, IaC validation, security scans, docker build+scan, OpenAPI drift, docs strict)
-- [ ] `.pre-commit-config.yaml` + gitleaks hook
-- [ ] `dependabot.yml`, `CODEOWNERS`, `pull_request_template.md`, `ISSUE_TEMPLATE/`
-- [ ] `docs/DEPLOYMENT.md`, `docs/TESTING.md`, `docs/RUNBOOK.md`, `docs/SECURITY.md`, `docs/COST.md`, `docs/CONTRIBUTING.md`, `docs/DEMO.md`, `docs/BLOG.md`, `docs/CONTRIBUTING.md`
-- [ ] `docs/API.md` generated from `openapi/openapi.yaml` (+ Swagger UI embed)
-- [ ] `docs/adr/NNNN-*.md` — one ADR per major decision (coverage threshold, serve rule, agent backends, H3 res 8, conformal interval, FastAPI 3.0 pin)
-- [ ] `.opencode/agent/*.md` — reviewer, test-writer, docs-writer, security-auditor, infra-engineer
-- [ ] `.opencode/command/verify.md` + `release.md`
-- [ ] `scripts/smoke.py`, `scripts/teardown.sh`, `scripts/backfill.py`, `load/k6` scripts
-- [ ] `infra/dashboards/` CloudWatch dashboard as code
-- [ ] `CHANGELOG.md` release flow
+- [ ] `infra/dashboards/` CloudWatch dashboard as code (alarms exist in the template)
+- [ ] Live agent evals gated behind `DHUAN_LIVE_AGENTS=1` (code path exists)
+- [ ] `docs/API.md` Swagger-UI embedding (the page documents routes + examples; the
+      interactive embed needs the published site URL)
 
 ## Done (recent)
 
-- [x] Pushed to GitHub: public https://github.com/FiscalMindset/aqi and private
-      https://github.com/FiscalMindset/dhuan, both on `main`
-- [x] Live stack running: API on 127.0.0.1:8080 (demo mode), web on 127.0.0.1:4173
-- [x] Real bugs fixed from the live run: estimate-tool `Depends` leak, evidence raw-result drop, CORS demo-banner header, map init error state
-- [x] Docs: README, ARCHITECTURE, AWS, ALGORITHM, MODEL, BACKEND, FRONTEND, GRADIENT_BOOSTING, DATA_COLLECTION, RULES, TECHNOLOGY_STACK, AGENTS_DESIGN, MODEL_CARD
-- [x] Skills: backend, frontend, ml, implementing, api-route, data-source, agent-tool, write-tests, update-docs, retrain-model, incident-response
+- [x] **Live stack verified end to end**: API on 127.0.0.1:8080, web on
+      127.0.0.1:4173 — estimate, stations, sources, /v1/explain with real
+      landfill causes, agent trace, Hindi switch, map canvas painting
+- [x] Real bugs fixed from the live run: estimate-tool `Depends` leak, evidence
+      raw-result drop, CORS demo-banner header, map loading/error states,
+      useful outside-coverage error text
+- [x] Git history rewritten so **every commit is authored by FiscalMindset**
+      (vicky kumar <254638087+FiscalMindset@users.noreply.github.com>) and
+      force-pushed to both remotes
+- [x] CI (14 jobs), CD with OIDC + canary, model-train, docs, CodeQL
+      workflows; dependabot, CODEOWNERS, PR/issue templates, pre-commit + gitleaks
+- [x] Docs: README, ARCHITECTURE, AWS, ALGORITHM, MODEL, BACKEND, FRONTEND,
+      GRADIENT_BOOSTING, DATA_COLLECTION, RULES, TECHNOLOGY_STACK,
+      AGENTS_DESIGN, MODEL_CARD, TESTING, DEPLOYMENT, RUNBOOK, SECURITY, COST,
+      CONTRIBUTING, DEMO, BLOG, API, DATA_SOURCES, 8 ADRs
+- [x] Skills: backend, frontend, ml, implementing, api-route, data-source,
+      agent-tool, write-tests, update-docs, retrain-model, incident-response
+- [x] Subagents: reviewer, test-writer, docs-writer, security-auditor,
+      infra-engineer; commands: /verify, /release
+- [x] openapi/openapi.yaml committed (12 routes, 3.0.3); scripts/smoke.py,
+      scripts/teardown.sh, scripts/backfill.py, load/estimate.js, CHANGELOG.md
+- [x] AGENTS.md at root + backend + frontend + infra (git identity documented)
+- [x] MkDocs strict build green (33 pages)

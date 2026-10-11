@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { categoryIcon, CATEGORY_COLORS, onColor } from "../../lib/aqi";
-import type { Estimate } from "../../lib/api";
+import { ApiError, type Estimate } from "../../lib/api";
 
 /** The estimate card: value, interval, category, station, age, honesty. */
 export function EstimatePanel({
@@ -18,8 +18,21 @@ export function EstimatePanel({
   if (loading) return <div className="skeleton h-24 rounded bg-white/5" aria-busy="true" />;
   if (error)
     return (
-      <div role="alert" className="p-3 rounded bg-red-950/60 text-sm">
-        {t("explorer.error")}
+      <div role="alert" data-testid="estimate-error" className="p-3 rounded bg-red-950/60 text-sm">
+        {/* the API's own RFC 9457 detail explains the real reason (e.g. the
+            point is outside the Delhi-NCR coverage polygon) */}
+        <p>
+          {error instanceof ApiError && error.problem.detail
+            ? error.problem.detail
+            : t("explorer.error")}
+        </p>
+        <button
+          type="button"
+          className="mt-2 px-3 min-h-touch rounded bg-white/10"
+          onClick={() => window.location.reload()}
+        >
+          {t("explorer.retry")}
+        </button>
       </div>
     );
   if (!estimate) return null;
