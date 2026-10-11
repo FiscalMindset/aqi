@@ -125,6 +125,62 @@ def compose_message(
     return subject, body
 
 
+class SmtpAlerter:
+    """Direct SMTP delivery over TLS.
+
+    SNS email needs a verified identity or a production SES account, which a new
+    AWS account does not have. When SMTP credentials are configured we deliver
+    the alert ourselves so a subscription produces a real email instead of a
+    composed-but-unsent message.
+
+    Secrets come from settings only (.env locally, SSM SecureString on AWS).
+    """
+
+    def __init__(self, settings: Any = None) -> None:
+        self.settings = settings
+
+    def configured(self) -> bool:
+        s = self.settings
+        return bool(s and s.smtp_host and s.smtp_username and s.smtp_password)
+
+    def publish(
+        self,
+        *,
+        locality: str,
+        email: str,
+        subject: str,
+        body: str,
+        message_attributes: dict[str, Any] | None = None,  # noqa: ARG002 - parity with SnsAlerter
+    ) -> str:
+        import smtplib
+        from email.message import EmailMessage
+
+        from dhuan.core.logging import get_logger
+
+        log = get_logger("alerts.smtp")
+        if not self.configured():
+            log.warning("smtp_not_configured: alert composed but not sent")
+            return ""
+        msg = EmailMessage()
+        msg["Subject"] = subject[:99]
+        sender_name = self.settings.alert_email_from_name or "Dhuan Detective"
+        msg["From"] = f"{sender_name} <{self.settings.smtp_from or self.settings.smtp_username}>"
+        msg["To"] = email
+        msg["X-Dhuan-Locality"] = locality
+        msg.set_content(body)
+        try:
+            with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=20) as srv:
+                if self.settings.smtp_starttls:
+                    srv.starttls()
+                srv.login(self.settings.smtp_username, self.settings.smtp_password)
+                srv.send_message(msg)
+        except (smtplib.SMTPException, OSError) as exc:
+            log.warning("smtp_send_failed: %s: %s", type(exc).__name__, exc)
+            return ""
+        log.info("alert_email_sent locality=%s to=%s", locality, email)
+        return f"smtp:{self.settings.smtp_username}"
+
+
 class SnsAlerter:
     """Publishes alerts via SNS with per-locality filter policies (email)."""
 
@@ -215,7 +271,9 @@ def evaluate_subscriptions(
 __all__ = [
     "CATEGORIES",
     "AlertDecision",
+    "SmtpAlerter",
     "SnsAlerter",
+    "best_alerter",
     "compose_message",
     "crossed_upward",
     "decide",
@@ -223,3 +281,15 @@ __all__ = [
     "evaluate_subscriptions",
     "in_quiet_hours",
 ]
+
+
+def best_alerter(settings: Any = None) -> Any:
+    """Pick the delivery path that is actually configured.
+
+    SMTP first: it works on a new AWS account where SNS email still needs a
+    verified identity. SNS is the fallback once SES/SNS is live in production.
+    """
+    smtp = SmtpAlerter(settings)
+    if smtp.configured():
+        return smtp
+    return SnsAlerter(settings)

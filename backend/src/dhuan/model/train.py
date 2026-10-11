@@ -89,6 +89,22 @@ def _make_model(quantile: float) -> HistGradientBoostingRegressor:
     )
 
 
+LAG1_INDEX = FEATURE_NAMES.index("station_lag1")
+
+
+def persistence_anchor(matrix: np.ndarray) -> np.ndarray:
+    """The persistence baseline for each row: the nearest station, 1h earlier.
+
+    This is the value the models are *anchored* on. Training on
+    ``pm25 - station_lag1`` makes persistence the null hypothesis: a model that
+    learns nothing predicts a delta of 0 and exactly reproduces persistence. A
+    model trained on raw ``pm25`` instead has to spend capacity re-learning the
+    level of each series from scratch, which is why the earlier run regressed to
+    the training-set mean and lost to persistence (bias -18.3 ug/m3).
+    """
+    return matrix[:, LAG1_INDEX]
+
+
 def _fit_models(x: np.ndarray, y: np.ndarray) -> dict[str, HistGradientBoostingRegressor]:
     models: dict[str, HistGradientBoostingRegressor] = {
         "p10": _make_model(0.10),
@@ -98,6 +114,23 @@ def _fit_models(x: np.ndarray, y: np.ndarray) -> dict[str, HistGradientBoostingR
     for model in models.values():
         model.fit(x, y)
     return models
+
+
+def _fit_anchored(matrix: np.ndarray, y: np.ndarray) -> dict[str, Any]:
+    """Fit the three quantile models on the persistence-anchored residual."""
+    anchor = persistence_anchor(matrix)
+    return _fit_models(matrix, y - anchor)
+
+
+def _predict_anchored(
+    models: dict[str, Any], matrix: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Anchored interval: persistence + the predicted residual quantiles."""
+    anchor = persistence_anchor(matrix)
+    lo, mid, hi = _predict_interval(models, matrix)
+    return np.clip(anchor + lo, 0.0, None), np.clip(anchor + mid, 0.0, None), np.clip(
+        anchor + hi, 0.0, None
+    )
 
 
 def _predict_interval(
@@ -161,6 +194,12 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
     holdout_start = datetime.fromisoformat(TEMPORAL_HOLDOUT_START)
     temporal_mask = np.asarray([t >= holdout_start for t in ts])
 
+    # Bound for the anchored correction. Without it an out-of-distribution
+    # feature vector (e.g. a stale station reading paired with today's weather)
+    # can make the model emit a correction larger than the value itself: we saw
+    # a +226 ug/m3 correction on a 226 ug/m3 baseline. The 99th percentile of
+    # |actual - anchor| on the training set is a data-derived, defensible cap.
+    # (computed after the temporal split below, where tr_mask exists)
     notes: list[str] = []
     if len(set(labels_station)) <= 1:
         notes = ["Only one station available; leave-one-station-out is degenerate."]
@@ -168,8 +207,19 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
     # ---- temporal holdout: train old months, test the last two -----------
     tr_mask = np.logical_not(temporal_mask)
     te_mask = temporal_mask
-    models = _fit_models(matrix[tr_mask], y[tr_mask])
-    lo, mid, hi = _predict_interval(models, matrix[te_mask])
+    # Bound for the anchored correction: the 99th percentile of
+    # |actual - anchor| on the training rows. Without it an out-of-distribution
+    # feature vector (a stale station reading paired with today's weather) can
+    # make the model emit a correction larger than the value itself - we measured
+    # a +226 ug/m3 correction on a 226 ug/m3 baseline.
+    # p95 of |actual - anchor| = 50 ug/m3 on this data (the 99th percentile is
+    # 1042 because real smog episodes move that far; clipping there would be no
+    # guard at all). p95 keeps genuine swings and only blocks absurd outputs.
+    delta_clip = float(
+        np.quantile(np.abs(y[tr_mask] - persistence_anchor(matrix[tr_mask])), 0.95)
+    )
+    models = _fit_anchored(matrix[tr_mask], y[tr_mask])
+    lo, mid, hi = _predict_anchored(models, matrix[te_mask])
     temporal = _metrics(y[te_mask], lo, mid, hi, n_train=int(tr_mask.sum()))
     conformal_r = conformal_radius(y[te_mask], mid)
     temporal_conf_cov = float(
@@ -185,8 +235,8 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
         m_te = labels_station == held
         if m_te.sum() < 50:
             continue
-        models_s = _fit_models(matrix[m_tr], y[m_tr])
-        lo_s, mid_s, hi_s = _predict_interval(models_s, matrix[m_te])
+        models_s = _fit_anchored(matrix[m_tr], y[m_tr])
+        lo_s, mid_s, hi_s = _predict_anchored(models_s, matrix[m_te])
         loso_rows.append(
             {
                 "station": held,
@@ -277,7 +327,11 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
 
     if train and save:
         ARTIFACTS.mkdir(parents=True, exist_ok=True)
-        final_models = _fit_models(matrix, y)
+        # The saved model must be the ANCHORED one, same as the one that was
+        # evaluated. Fitting _fit_models here produced an artifact that returned
+        # raw PM2.5 while predict_from_frame added the anchor on top, doubling
+        # the value (226 -> 452).
+        final_models = _fit_anchored(matrix, y)
         payload = {
             "models": final_models,
             "features": list(FEATURE_NAMES),
@@ -285,6 +339,7 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
             "trained_rows": len(y),
             "trained_utc": evaluation.created_utc,
             "conformal_radius": conformal_r,
+            "delta_clip": delta_clip,
         }
         with (ARTIFACTS / "model.pkl").open("wb") as f:
             pickle.dump(payload, f)

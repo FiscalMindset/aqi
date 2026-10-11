@@ -8,6 +8,7 @@ and resolve to empty strings locally.
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Literal
 
@@ -65,6 +66,16 @@ class Settings(BaseSettings):
     dynamodb_table_subscriptions: str = "dhuan-subscriptions"
     s3_bucket: str = "dhuan-artifacts"
     sns_topic_arn: str = ""
+    # Direct SMTP delivery (used when SES/SNS email is not verified yet, and for
+    # local runs). Secrets live in .env locally and SSM SecureString on AWS;
+    # never in the repo.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+    alert_email_from_name: str = "Dhuan Detective"
     ssm_parameter_prefix: str = "/dhuan"
 
     # model + grid
@@ -102,9 +113,46 @@ class Settings(BaseSettings):
         return self.demo_mode
 
 
+def _load_ssm_overrides() -> dict[str, str]:
+    """Read /dhuan/* from SSM so secrets never ship in the image or env vars.
+
+    Only the names below are read, and a missing parameter is not an error:
+    local runs and LocalStack have no SSM at all. Values are cached by
+    get_settings' lru_cache for the lifetime of the process.
+    """
+    wanted = ("SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
+              "SMTP_PORT", "OPENAQ_API_KEY", "FIRMS_MAP_KEY")
+    import boto3
+
+    try:
+        client = boto3.client("ssm")
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    for name in wanted:
+        try:
+            resp = client.get_parameter(Name=f"/dhuan/{name}", WithDecryption=True)
+        except Exception:
+            continue
+        value = resp.get("Parameter", {}).get("Value")
+        if value:
+            out[name.lower()] = value
+    return out
+
+
+logger = logging.getLogger(__name__)
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    base = Settings()
+    overrides = _load_ssm_overrides()
+    if not overrides:
+        return base
+    # SSM wins over the environment, but only for fields that already exist.
+    fields = set(base.model_fields)
+    data = {k: v for k, v in overrides.items() if k in fields}
+    return base.model_copy(update=data) if data else base
 
 
 def point_in_delhi(p: Point, settings: Settings | None = None) -> bool:

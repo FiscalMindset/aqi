@@ -17,7 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from dhuan.api.errors import outside_coverage_problem, upstream_problem
-from dhuan.api.models import EstimateOut
+from dhuan.api.models import EstimateOut, FeatureContribution
 from dhuan.api.services import nearest_reading, stations_near, weather_now
 from dhuan.core.config import Settings, get_settings
 from dhuan.core.metrics import record
@@ -27,8 +27,10 @@ from dhuan.model.cpcb import CPCB_TABLE_VERSION, category_for_pm25
 from dhuan.model.predict import (
     ModelNotTrainedError,
     build_features_for_point,
+    explain_features,
     load_artifact,
     nearest_station_fallback,
+    persistence_anchor,
     predict_from_frame,
     static_sources_default,
 )
@@ -77,6 +79,9 @@ async def compute_estimate(lat: float, lon: float, settings: Settings) -> Estima
     served_by = "nearest-station"
     pm25_low = pm25_mid = pm25_high = 0.0
     model_version = settings.model_version
+    features_used: list[FeatureContribution] = []
+    anchor_value: float | None = station_pm25
+    model_adjustment: float | None = None
     if weather is not None and station_pm25 is not None:
         try:
             artifact = load_artifact()
@@ -106,6 +111,11 @@ async def compute_estimate(lat: float, lon: float, settings: Settings) -> Estima
                 prediction.pm25_high,
             )
             model_version = f"pkl:{prediction.model_version}"
+            # Which parameters produced this number, for this point.
+            contributions = explain_features(features, artifact)
+            features_used = [FeatureContribution(**c) for c in contributions]
+            anchor_value = persistence_anchor(features)
+            model_adjustment = pm25_mid - anchor_value
         except ModelNotTrainedError:
             record("EstimateModelMissing", 1)
         except Exception:
@@ -114,6 +124,8 @@ async def compute_estimate(lat: float, lon: float, settings: Settings) -> Estima
         base = nearest_station_fallback(station_pm25 or 0.0)
         pm25_low, pm25_mid, pm25_high = base.pm25_low, base.pm25_mid, base.pm25_high
         model_version = "nearest-station-baseline"
+        features_used = []
+        model_adjustment = 0.0
         record("EstimateServedByBaseline", 1)
 
     if station_pm25 is None and served_by != "model":
@@ -142,4 +154,12 @@ async def compute_estimate(lat: float, lon: float, settings: Settings) -> Estima
         cpcb_table_version=CPCB_TABLE_VERSION,
         honesty=HONESTY_NOTE,
         demo_mode=settings.demo_mode,
+        persistence_anchor_ugm3=round(anchor_value, 1) if anchor_value is not None else None,
+        model_adjustment_ugm3=round(model_adjustment, 1) if model_adjustment is not None else None,
+        features_used=features_used,
+        method=(
+            "gradient-boosted-trees on persistence-anchored residual"
+            if served_by == "model"
+            else "persistence baseline (model unavailable)"
+        ),
     )

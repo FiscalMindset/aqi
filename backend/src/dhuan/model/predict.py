@@ -9,6 +9,7 @@ layer), never read from the model artifact.
 from __future__ import annotations
 
 import json
+import os
 import pickle
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,7 +26,18 @@ from dhuan.model.features import (
     static_features,
 )
 
-ARTIFACTS = Path(__file__).resolve().parents[2] / "models"
+# DHUAN_MODEL_DIR wins (set to /var/task/models in the Lambda image), then the
+# repository layout. The previous value used parents[2], which from
+# src/dhuan/model/predict.py resolves to src/models - a directory that does not
+# exist, so load_artifact() always raised ModelNotTrainedError and every live
+# response silently fell back to the nearest-station baseline. The model has
+# never actually run in the deployed app.
+ARTIFACTS = Path(
+    os.environ.get("DHUAN_MODEL_DIR") or Path(__file__).resolve().parents[3] / "models"
+)
+
+
+LAG1_INDEX = FEATURE_NAMES.index("station_lag1")
 
 
 class ModelNotTrainedError(RuntimeError):
@@ -59,7 +71,17 @@ def predict_from_frame(
     art = artifact or load_artifact()
     x = np.asarray([[features[name] for name in FEATURE_NAMES]], dtype=float)
     models: dict[str, Any] = art["models"]
-    mid = float(max(0.0, models["p50"].predict(x)[0]))
+    # The models are trained on the persistence-anchored residual
+    # (pm25 - station_lag1); see dhuan.model.train. Anchored artifacts only.
+    anchor = float(x[0, LAG1_INDEX])
+    delta = float(models["p50"].predict(x)[0])
+    # Bound the correction: the 99th percentile of |actual - anchor| seen in
+    # training. Without it an out-of-distribution feature vector can produce a
+    # correction larger than the value being corrected.
+    clip = float(art.get("delta_clip", 0.0))
+    if clip > 0:
+        delta = max(-clip, min(clip, delta))
+    mid = float(max(0.0, anchor + delta))
     radius = float(art.get("conformal_radius", 0.0))
     low = max(0.0, mid - radius)
     high = mid + radius
@@ -135,11 +157,121 @@ def _delhi_sources() -> list[Source]:
 
 
 __all__ = [
+    "NEUTRAL_VALUES",
     "ModelNotTrainedError",
     "Prediction",
     "build_features_for_point",
+    "explain_features",
+    "feature_units",
     "load_artifact",
     "nearest_station_fallback",
+    "persistence_anchor",
     "predict_from_frame",
     "static_sources_default",
 ]
+
+
+# --------------------------------------------------------------------------
+# Per-prediction attribution
+# --------------------------------------------------------------------------
+# "Which parameters produced this number?" is answered by occlusion: replace one
+# feature at a time with a neutral value and measure how far the prediction
+# moves. The result is in the same units as the target (ug/m3), so a
+# contribution of -40 means "this parameter is pushing the estimate down by
+# about 40 ug/m3 relative to a typical value".
+#
+# This is honest and cheap (27 extra predict() calls on a 1-row matrix) and
+# needs no extra dependency, unlike SHAP. It is an association, not a causal
+# claim, and the UI labels it that way.
+
+NEUTRAL_VALUES: dict[str, float] = {
+    "wind_speed": 2.0,
+    "wind_gust": 4.0,
+    "temp_c": 25.0,
+    "rh": 50.0,
+    "precip": 0.0,
+    "station_lag1": 0.0,
+    "station_lag24": 0.0,
+    "station_rolling6": 0.0,
+    "wind_dir_sin": 0.0,
+    "wind_dir_cos": 1.0,
+    "hour_sin": 0.0,
+    "hour_cos": 1.0,
+    "month_sin": 0.0,
+    "month_cos": 1.0,
+}
+
+
+def feature_units(name: str) -> str:
+    if name.endswith("_km"):
+        return "km"
+    if name.endswith("_5km"):
+        return "count within 5 km"
+    if name in {"temp_c"}:
+        return "degC"
+    if name in {"rh"}:
+        return "%"
+    if name in {"precip"}:
+        return "mm"
+    if name in {"wind_speed", "wind_gust"}:
+        return "m/s"
+    if name in {"lat", "lon"}:
+        return "degrees"
+    if name in {"hour", "dayofweek", "month"}:
+        return "index"
+    return "dimensionless"
+
+
+def explain_features(
+    features: dict[str, float],
+    artifact: dict[str, Any] | None = None,
+    *,
+    baseline: dict[str, float] | None = None,
+) -> list[dict[str, Any]]:
+    """Per-feature contribution to this prediction, largest effect first.
+
+    `baseline` lets a caller supply reference values (e.g. the training median)
+    instead of the neutral constants, which is what `model_card` reports.
+    """
+    art = artifact or load_artifact()
+    model = art["models"]["p50"]
+    x = np.asarray([[features[name] for name in FEATURE_NAMES]], dtype=float)
+    anchor = float(x[0, LAG1_INDEX])
+    actual = float(max(0.0, anchor + model.predict(x)[0]))
+
+    neutral = dict(NEUTRAL_VALUES)
+    if baseline:
+        neutral.update(baseline)
+
+    # The anchor (nearest station, 1h earlier) is held fixed while every other
+    # feature is perturbed, so the reported effects are the model's *adjustments
+    # to the persistence baseline* and not a restatement of it. Without this,
+    # zeroing station_lag1 would also move the anchor and dominate every row.
+    held_anchor = x[0, LAG1_INDEX]
+    rows: list[dict[str, Any]] = []
+    for i, name in enumerate(FEATURE_NAMES):
+        if name in {"lat", "lon", "station_lag1"}:
+            # positional proxies, not physical parameters; the anchor is the
+            # baseline itself and is reported separately as `persistence_anchor`
+            continue
+        probe = x.copy()
+        probe[0, LAG1_INDEX] = held_anchor
+        probe[0, i] = neutral.get(name, float(np.mean(probe[0, i])))
+        pred = float(max(0.0, anchor + model.predict(probe)[0]))
+        rows.append(
+            {
+                "name": name,
+                "value": round(float(x[0, i]), 3),
+                "unit": feature_units(name),
+                "reference": round(float(probe[0, i]), 3),
+                "contribution_ugm3": round(pred - actual, 2),
+                "absolute_effect_ugm3": round(abs(pred - actual), 2),
+            }
+        )
+    rows.sort(key=lambda r: r["absolute_effect_ugm3"], reverse=True)
+    return rows
+
+
+def persistence_anchor(features: dict[str, float]) -> float:
+    """The baseline the model corrects: nearest station, one hour earlier."""
+    return float(features.get("station_lag1", 0.0))

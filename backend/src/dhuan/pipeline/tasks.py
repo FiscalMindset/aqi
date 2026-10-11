@@ -280,10 +280,10 @@ def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
 
 def publish_alerts(event: dict[str, Any]) -> dict[str, Any]:
     """Publish decided alerts via SNS (no-op with a warning if unconfigured)."""
-    from dhuan.alerts.alerts import SnsAlerter, compose_message
+    from dhuan.alerts.alerts import best_alerter, compose_message
 
     alerts = event.get("alerts", [])
-    alerter = SnsAlerter(get_settings_for_pipeline())
+    alerter = best_alerter(get_settings_for_pipeline())
     published = 0
     for alert in alerts:
         if not alert.get("decision", {}).get("should_send"):

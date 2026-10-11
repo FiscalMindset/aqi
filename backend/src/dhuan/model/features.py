@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -24,7 +25,9 @@ from typing import Any
 
 from dhuan.core.units import Point, haversine_km
 
-DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+# Same resolution rule as dhuan.model.predict.ARTIFACTS: the image sets
+# DHUAN_DATA_DIR, local runs fall back to the repository layout.
+DATA_DIR = Path(os.environ.get("DHUAN_DATA_DIR") or Path(__file__).resolve().parents[3] / "data")
 
 FEATURE_NAMES: tuple[str, ...] = (
     # calendar

@@ -97,6 +97,9 @@ ignore = [
 # OpenAPI generator is a build-time script; lazy imports keep it standalone.
 "src/dhuan/scripts/*" = ["PLC0415"]
 "src/dhuan/api/openapi_gen.py" = ["PLC0415"]
+# settings: boto3 is imported lazily and SSM ParameterNotFound is expected
+"src/dhuan/core/config.py" = ["PLC0415", "S112"]
+"src/dhuan/api/routers/model_card.py" = ["PLC0415"]
 "src/dhuan/alerts/*" = ["PLC0415"]
 
 [tool.mypy]

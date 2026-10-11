@@ -68,6 +68,17 @@ class StatusOut(BaseModel):
     demo_mode: bool
 
 
+class FeatureContribution(BaseModel):
+    """How much one input parameter moved this particular estimate."""
+
+    name: str
+    value: float
+    unit: str
+    reference: float
+    contribution_ugm3: float
+    absolute_effect_ugm3: float
+
+
 class EstimateOut(BaseModel):
     """PM2.5 estimate with an 80% interval and full honesty block."""
 
@@ -88,6 +99,42 @@ class EstimateOut(BaseModel):
     cpcb_table_version: str
     honesty: str
     demo_mode: bool
+    # "Which parameters produced this number?" — answered per prediction.
+    persistence_anchor_ugm3: float | None = None
+    model_adjustment_ugm3: float | None = None
+    features_used: list[FeatureContribution] = []
+    method: str = "persistence-baseline"
+
+
+class ModelMetrics(BaseModel):
+    """Held-out accuracy for one evaluation protocol."""
+
+    n_train: int
+    n_test: int
+    mae: float
+    rmse: float
+    r2: float
+    bias: float
+    coverage80: float | None = None
+    mean_width: float | None = None
+
+
+class ModelCardOut(BaseModel):
+    """Algorithm, accuracy and provenance — regenerated from metrics.json."""
+
+    algorithm: str
+    trained_at_utc: str
+    snapshot_sha256: str
+    n_rows: int
+    stations: list[dict[str, object]]
+    temporal_holdout: ModelMetrics
+    leave_one_station_out: ModelMetrics
+    baselines: dict[str, ModelMetrics]
+    winner: str
+    features: list[str]
+    n_features: int
+    conformal_radius_ugm3: float
+    notes: list[str]
 
 
 class ValidationOut(BaseModel):

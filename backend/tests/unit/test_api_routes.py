@@ -206,7 +206,12 @@ def test_estimate_model_failure_falls_back_to_station(
     def _boom(*_a: object, **_k: object) -> None:
         raise RuntimeError("model artifact corrupt")
 
-    monkeypatch.setattr("dhuan.model.predict.load_artifact", _boom)
+    # Patch the symbol the route actually calls. Patching
+    # dhuan.model.predict.load_artifact has no effect: estimate.py does
+    # `from dhuan.model.predict import load_artifact`, so it holds its own
+    # reference. The test passed for years only because ARTIFACTS pointed at a
+    # non-existent src/models, which raised ModelNotTrainedError by accident.
+    monkeypatch.setattr("dhuan.api.routers.estimate.load_artifact", _boom)
 
     respx.get("https://api.openaq.org/v3/locations").mock(
         return_value=httpx.Response(

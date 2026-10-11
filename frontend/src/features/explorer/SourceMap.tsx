@@ -144,11 +144,16 @@ export function SourceMap({
   }, []);
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 h-full w-full">
       <div
         ref={ref}
         data-testid="map"
-        className="absolute inset-0"
+        // h-full/w-full, NOT `absolute inset-0`: maplibre-gl.css sets
+        // .maplibregl-map { position: relative } and is imported after
+        // Tailwind, so it overrides .absolute with equal specificity. The div
+        // then became position:relative with no content height -> 0px, and the
+        // map was invisible even though every tile returned 200.
+        className="h-full w-full"
         role="application"
         aria-label="Map of Delhi-NCR with candidate pollution sources"
       />
