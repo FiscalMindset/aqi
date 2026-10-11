@@ -4,8 +4,8 @@ Single source of truth for what is in flight. Structural history lives in `TASKS
 
 ## In progress
 
-- [ ] Verify `sam build --use-container` + a real staging deploy once AWS
-      credentials are available (everything else is green)
+- [ ] `aws login` (human) → `sam build --use-container` → staging deploy →
+      `scripts/smoke.py --env staging` (see docs/AWS_JOURNEY.md runbook)
 
 ## Remaining backlog
 
@@ -16,6 +16,9 @@ Single source of truth for what is in flight. Structural history lives in `TASKS
 
 ## Done (recent)
 
+- [x] **aws_journey.md** — the real credential story (login refresh `expiresIn`,
+      HOME isolation, `boto3.DEFAULT_SESSION` reset), cfn-lint findings fixed,
+      and the deployment runbook for when credentials exist
 - [x] **Live stack verified end to end**: API on 127.0.0.1:8080, web on
       127.0.0.1:4173 — estimate, stations, sources, /v1/explain with real
       landfill causes, agent trace, Hindi switch, map canvas painting
