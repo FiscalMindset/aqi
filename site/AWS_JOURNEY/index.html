@@ -1649,6 +1649,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#phase-3b-the-actual-login-failure-hit-and-trial-as-it-really-happened" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3b — The actual login failure (hit-and-trial, as it really happened)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 3b — The actual login failure (hit-and-trial, as it really happened)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-each-error-actually-meant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What each error actually meant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-lesson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The lesson
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#phase-4-what-is-deployed-vs-not" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1894,6 +1933,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#phase-3b-the-actual-login-failure-hit-and-trial-as-it-really-happened" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3b — The actual login failure (hit-and-trial, as it really happened)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 3b — The actual login failure (hit-and-trial, as it really happened)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-each-error-actually-meant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What each error actually meant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-lesson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The lesson
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#phase-4-what-is-deployed-vs-not" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2023,6 +2101,60 @@
 </ol>
 <h3 id="rule-we-wrote-down">Rule we wrote down<a class="headerlink" href="#rule-we-wrote-down" title="Permanent link">&para;</a></h3>
 <p>Never let <code>~/.aws</code> state decide test outcomes. Tests own their credentials; production uses OIDC.</p>
+<h2 id="phase-3b-the-actual-login-failure-hit-and-trial-as-it-really-happened">Phase 3b — The actual login failure (hit-and-trial, as it really happened)<a class="headerlink" href="#phase-3b-the-actual-login-failure-hit-and-trial-as-it-really-happened" title="Permanent link">&para;</a></h2>
+<p>This is the raw transcript of the first <code>aws login</code> attempt on this machine, kept because it is exactly what a human hits, and the error messages are not what you would guess.</p>
+<p><strong>Attempt 1 — the AWS sign-in page returned a 400:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>400 Bad Request
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>You may have typed the address incorrectly or you may have used an outdated link.
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>Please clear your cookies and try the request again. If the problem persists,
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>please contact Support. We apologize for the inconvenience.
+</code></pre></div>
+<p>That 400 is not a code bug and not a wrong region — it is the AWS sign-in endpoint rejecting the cross-device authorization URL. The confusing part is that <code>aws login</code> still prints a URL and a state/PKCE code challenge, so it <em>looks</em> like the login is fine right up until the browser refuses the page.</p>
+<p><strong>Attempt 2 — <code>aws login --remote</code> failed at the code prompt:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>$ aws login --remote
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Browser will not be automatically opened.
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>Please visit the following URL:
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>https://ap-south-1.signin.aws.amazon.com/v1/authorize?response_type=code&amp;...
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Enter the authorization code displayed in your browser:
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>&lt;pressed Enter without a code&gt;
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>aws: [ERROR]: argument should be a bytes-like object or ASCII string, not 'NoneType'
+</code></pre></div>
+<p>The <code>not 'NoneType'</code> error is a real bug in the CLI's handling of an empty authorization code — you submitted nothing, and instead of a clean "no code entered" message it crashed deep in the argument parser. <strong>The fix is to actually paste a code this time</strong>, and the 400 from attempt 1 was a red herring.</p>
+<p><strong>Attempt 3 — it worked.</strong> Opened the <code>--remote</code> URL in a browser where I was already signed in to AWS, copied the long authorization code from the confirmation page, pasted it, and:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>$ aws login --remote
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>Enter the authorization code displayed in your browser: Y29kZT1leUo2...  (long base64 code)
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>Updated profile default to use arn:aws:iam::609394381612:root credentials.
+</code></pre></div>
+<p>Then <code>aws sts get-caller-identity</code> returned account <code>609394381612</code> (role <code>root</code>), and the AWS CLI was usable.</p>
+<h3 id="what-each-error-actually-meant">What each error actually meant<a class="headerlink" href="#what-each-error-actually-meant" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Real meaning</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400 Bad Request</code> on the sign-in page</td>
+<td>stale/expired cookies or an outdated cross-device link, not a wrong region</td>
+<td>clear cookies for <code>*.amazon.com</code>, or just use <code>--remote</code> again</td>
+</tr>
+<tr>
+<td><code>not 'NoneType'</code></td>
+<td>I pressed Enter with an empty authorization code — the CLI's error handling, not AWS's</td>
+<td>copy the code shown in the browser and paste it</td>
+</tr>
+<tr>
+<td><code>Session has expired. Please reauthenticate</code> (from Phase 3)</td>
+<td>credentials existed but the SSO login token was gone</td>
+<td><code>aws login</code> again, or the test-isolation fix from Phase 3</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-lesson">The lesson<a class="headerlink" href="#the-lesson" title="Permanent link">&para;</a></h3>
+<p>None of these three errors were in our code. Every one of them was AWS CLI or AWS sign-in behaviour. The only real bug (<code>NoneType</code>) is in the AWS CLI itself, and the right move was to read the error, notice it was about <em>my input</em> rather than the code, and paste the actual code. Documenting this here so the next person does not burn an hour on it.</p>
 <h2 id="phase-4-what-is-deployed-vs-not">Phase 4 — What is deployed vs not<a class="headerlink" href="#phase-4-what-is-deployed-vs-not" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2034,7 +2166,7 @@
 <tbody>
 <tr>
 <td><strong>Deployed for real</strong></td>
-<td>nothing yet — no credentials in the build environment</td>
+<td>nothing yet — credentials now work (<code>aws login</code> succeeded, account <code>609394381612</code>), deploy is the next step</td>
 </tr>
 <tr>
 <td><strong>Verified locally</strong></td>
@@ -2042,31 +2174,32 @@
 </tr>
 <tr>
 <td><strong>Ready to deploy</strong></td>
-<td><code>sam build</code> → <code>sam deploy --config-env staging</code> via <code>cd.yml</code>, or by hand once <code>aws login</code> succeeds</td>
+<td><code>sam build</code> → <code>sam deploy --config-env staging</code> via <code>cd.yml</code>, or by hand now that login works</td>
 </tr>
 </tbody>
 </table>
 <h2 id="phase-5-deployment-runbook-for-when-credentials-exist">Phase 5 — Deployment runbook (for when credentials exist)<a class="headerlink" href="#phase-5-deployment-runbook-for-when-credentials-exist" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># 1. authenticate (human does this; CI uses OIDC)</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>aws<span class="w"> </span>login<span class="w">          </span><span class="c1"># or: aws configure</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># 2. put secrets (never in the repo)</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>aws<span class="w"> </span>ssm<span class="w"> </span>put-parameter<span class="w"> </span>--name<span class="w"> </span>/dhuan/openaq-api-key<span class="w"> </span>--type<span class="w"> </span>SecureString<span class="w"> </span>--value<span class="w"> </span><span class="s2">"..."</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>aws<span class="w"> </span>ssm<span class="w"> </span>put-parameter<span class="w"> </span>--name<span class="w"> </span>/dhuan/firms-map-key<span class="w"> </span>--type<span class="w"> </span>SecureString<span class="w"> </span>--value<span class="w"> </span><span class="s2">"..."</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>aws<span class="w"> </span>ssm<span class="w"> </span>put-parameter<span class="w"> </span>--name<span class="w"> </span>/dhuan/prod/api-url<span class="w"> </span>--type<span class="w"> </span>String<span class="w"> </span>--value<span class="w"> </span><span class="s2">"https://..."</span><span class="w"> </span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># 3. build + deploy</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>sam<span class="w"> </span>build<span class="w"> </span>--template<span class="w"> </span>infra/template.yaml<span class="w"> </span>--use-container
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>sam<span class="w"> </span>deploy<span class="w"> </span>--config-file<span class="w"> </span>infra/samconfig.toml<span class="w"> </span>--config-env<span class="w"> </span>staging<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span>--parameter-overrides<span class="w"> </span><span class="s2">"Environment=staging BedrockModelId=&lt;model&gt;"</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="c1"># 4. smoke</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>python<span class="w"> </span>scripts/smoke.py<span class="w"> </span>--env<span class="w"> </span>staging
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># 5. frontend</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="nb">cd</span><span class="w"> </span>frontend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>ci<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>run<span class="w"> </span>build
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>aws<span class="w"> </span>s3<span class="w"> </span>sync<span class="w"> </span>dist<span class="w"> </span>s3://&lt;web-bucket&gt;<span class="w"> </span>--delete
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>aws<span class="w"> </span>cloudfront<span class="w"> </span>create-invalidation<span class="w"> </span>--distribution-id<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--paths<span class="w"> </span><span class="s2">"/*"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># 1. authenticate (already done on this machine; CI uses OIDC)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aws<span class="w"> </span>login<span class="w">          </span><span class="c1"># proven working — see Phase 3b</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>aws<span class="w"> </span>sts<span class="w"> </span>get-caller-identity
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># 2. put secrets (never in the repo)</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>aws<span class="w"> </span>ssm<span class="w"> </span>put-parameter<span class="w"> </span>--name<span class="w"> </span>/dhuan/openaq-api-key<span class="w"> </span>--type<span class="w"> </span>SecureString<span class="w"> </span>--value<span class="w"> </span><span class="s2">"..."</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>aws<span class="w"> </span>ssm<span class="w"> </span>put-parameter<span class="w"> </span>--name<span class="w"> </span>/dhuan/firms-map-key<span class="w"> </span>--type<span class="w"> </span>SecureString<span class="w"> </span>--value<span class="w"> </span><span class="s2">"..."</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>aws<span class="w"> </span>ssm<span class="w"> </span>put-parameter<span class="w"> </span>--name<span class="w"> </span>/dhuan/prod/api-url<span class="w"> </span>--type<span class="w"> </span>String<span class="w"> </span>--value<span class="w"> </span><span class="s2">"https://..."</span><span class="w"> </span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1"># 3. build + deploy</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>sam<span class="w"> </span>build<span class="w"> </span>--template<span class="w"> </span>infra/template.yaml<span class="w"> </span>--use-container
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>sam<span class="w"> </span>deploy<span class="w"> </span>--config-file<span class="w"> </span>infra/samconfig.toml<span class="w"> </span>--config-env<span class="w"> </span>staging<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span>--parameter-overrides<span class="w"> </span><span class="s2">"Environment=staging BedrockModelId=&lt;model&gt;"</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="c1"># 4. smoke</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>python<span class="w"> </span>scripts/smoke.py<span class="w"> </span>--env<span class="w"> </span>staging
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="c1"># 5. frontend</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="nb">cd</span><span class="w"> </span>frontend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>ci<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>run<span class="w"> </span>build
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>aws<span class="w"> </span>s3<span class="w"> </span>sync<span class="w"> </span>dist<span class="w"> </span>s3://&lt;web-bucket&gt;<span class="w"> </span>--delete
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>aws<span class="w"> </span>cloudfront<span class="w"> </span>create-invalidation<span class="w"> </span>--distribution-id<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--paths<span class="w"> </span><span class="s2">"/*"</span>
 </code></pre></div>
 <p>Expected first-run issues (we looked for these in the template):
 - <strong>CloudFront invalidation takes minutes</strong> — the smoke test targets the API, not the website.
@@ -2079,6 +2212,10 @@
 <li>Credentials fail in confusing ways (<code>expiresIn</code>) — isolate them from tests.</li>
 <li>Health checks lie: poll service endpoints yourself before declaring a container up.</li>
 <li>LocalStack ≠ AWS: SNS email confirmation, SES sandboxing and CloudFront timings are only observable in the real account.</li>
+<li>AWS login errors are almost never your code — read whether the error is about
+   <em>your input</em> (empty code → <code>NoneType</code>) or the <em>code</em>; only the latter is a bug here.</li>
+<li><code>sam validate --lint</code> catches transform-level errors that plain <code>cfn-lint</code> misses
+   (it caught the <code>SSM_PARAMETER_PREFIX</code> reference cfn-lint let through). Run both.</li>
 <li>Every "verified locally" claim needs the command and its output; everything else is needs-deploy.</li>
 </ol>
 

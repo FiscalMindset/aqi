@@ -94,6 +94,9 @@ ignore = [
 "src/dhuan/api/*" = ["B008"]
 # Lambda task handlers import lazily to keep cold starts small.
 "src/dhuan/pipeline/*" = ["PLC0415"]
+# OpenAPI generator is a build-time script; lazy imports keep it standalone.
+"src/dhuan/scripts/*" = ["PLC0415"]
+"src/dhuan/api/openapi_gen.py" = ["PLC0415"]
 "src/dhuan/alerts/*" = ["PLC0415"]
 
 [tool.mypy]

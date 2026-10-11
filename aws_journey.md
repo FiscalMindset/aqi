@@ -61,19 +61,71 @@ The `KeyError: 'expiresIn'` is the confusing part: it comes from `botocore/crede
 
 Never let `~/.aws` state decide test outcomes. Tests own their credentials; production uses OIDC.
 
+## Phase 3b — The actual login failure (hit-and-trial, as it really happened)
+
+This is the raw transcript of the first `aws login` attempt on this machine, kept because it is exactly what a human hits, and the error messages are not what you would guess.
+
+**Attempt 1 — the AWS sign-in page returned a 400:**
+
+```
+400 Bad Request
+You may have typed the address incorrectly or you may have used an outdated link.
+Please clear your cookies and try the request again. If the problem persists,
+please contact Support. We apologize for the inconvenience.
+```
+
+That 400 is not a code bug and not a wrong region — it is the AWS sign-in endpoint rejecting the cross-device authorization URL. The confusing part is that `aws login` still prints a URL and a state/PKCE code challenge, so it *looks* like the login is fine right up until the browser refuses the page.
+
+**Attempt 2 — `aws login --remote` failed at the code prompt:**
+
+```
+$ aws login --remote
+Browser will not be automatically opened.
+Please visit the following URL:
+https://ap-south-1.signin.aws.amazon.com/v1/authorize?response_type=code&...
+Enter the authorization code displayed in your browser:
+<pressed Enter without a code>
+aws: [ERROR]: argument should be a bytes-like object or ASCII string, not 'NoneType'
+```
+
+The `not 'NoneType'` error is a real bug in the CLI's handling of an empty authorization code — you submitted nothing, and instead of a clean "no code entered" message it crashed deep in the argument parser. **The fix is to actually paste a code this time**, and the 400 from attempt 1 was a red herring.
+
+**Attempt 3 — it worked.** Opened the `--remote` URL in a browser where I was already signed in to AWS, copied the long authorization code from the confirmation page, pasted it, and:
+
+```
+$ aws login --remote
+Enter the authorization code displayed in your browser: Y29kZT1leUo2...  (long base64 code)
+Updated profile default to use arn:aws:iam::609394381612:root credentials.
+```
+
+Then `aws sts get-caller-identity` returned account `609394381612` (role `root`), and the AWS CLI was usable.
+
+### What each error actually meant
+
+| Error | Real meaning | Action |
+|---|---|---|
+| `400 Bad Request` on the sign-in page | stale/expired cookies or an outdated cross-device link, not a wrong region | clear cookies for `*.amazon.com`, or just use `--remote` again |
+| `not 'NoneType'` | I pressed Enter with an empty authorization code — the CLI's error handling, not AWS's | copy the code shown in the browser and paste it |
+| `Session has expired. Please reauthenticate` (from Phase 3) | credentials existed but the SSO login token was gone | `aws login` again, or the test-isolation fix from Phase 3 |
+
+### The lesson
+
+None of these three errors were in our code. Every one of them was AWS CLI or AWS sign-in behaviour. The only real bug (`NoneType`) is in the AWS CLI itself, and the right move was to read the error, notice it was about *my input* rather than the code, and paste the actual code. Documenting this here so the next person does not burn an hour on it.
+
 ## Phase 4 — What is deployed vs not
 
 | | |
 |---|---|
-| **Deployed for real** | nothing yet — no credentials in the build environment |
+| **Deployed for real** | nothing yet — credentials now work (`aws login` succeeded, account `609394381612`), deploy is the next step |
 | **Verified locally** | cfn-lint zero findings, ASL valid, 230 backend tests, 80 Playwright tests, live API on :8080 and web on :4173 serving real data + real OSM sources |
-| **Ready to deploy** | `sam build` → `sam deploy --config-env staging` via `cd.yml`, or by hand once `aws login` succeeds |
+| **Ready to deploy** | `sam build` → `sam deploy --config-env staging` via `cd.yml`, or by hand now that login works |
 
 ## Phase 5 — Deployment runbook (for when credentials exist)
 
 ```bash
-# 1. authenticate (human does this; CI uses OIDC)
-aws login          # or: aws configure
+# 1. authenticate (already done on this machine; CI uses OIDC)
+aws login          # proven working — see Phase 3b
+aws sts get-caller-identity
 
 # 2. put secrets (never in the repo)
 aws ssm put-parameter --name /dhuan/openaq-api-key --type SecureString --value "..."
@@ -106,4 +158,8 @@ Expected first-run issues (we looked for these in the template):
 2. Credentials fail in confusing ways (`expiresIn`) — isolate them from tests.
 3. Health checks lie: poll service endpoints yourself before declaring a container up.
 4. LocalStack ≠ AWS: SNS email confirmation, SES sandboxing and CloudFront timings are only observable in the real account.
+5. AWS login errors are almost never your code — read whether the error is about
+   *your input* (empty code → `NoneType`) or the *code*; only the latter is a bug here.
+6. `sam validate --lint` catches transform-level errors that plain `cfn-lint` misses
+   (it caught the `SSM_PARAMETER_PREFIX` reference cfn-lint let through). Run both.
 5. Every "verified locally" claim needs the command and its output; everything else is needs-deploy.

@@ -44,7 +44,6 @@ Globals:
         DYNAMODB_TABLE_FEEDS: !Ref FeedsTable
         DYNAMODB_TABLE_SUBSCRIPTIONS: !Ref SubscriptionsTable
         S3_BUCKET: !Ref ArtifactsBucket
-        SSM_PARAMETER_PREFIX: /dhuan
         MODEL_VERSION: baseline-v1
         H3_RESOLUTION: "8"
         SMS_ENABLED: "0"
@@ -289,7 +288,7 @@ Resources:
             - Effect: Allow
               Action:
                 - ssm:GetParameter
-              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SSM_PARAMETER_PREFIX}/*
+              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dhuan/*
             - Effect: Allow
               Action:
                 - xray:PutTraceSegments
