@@ -37,7 +37,6 @@ test-results/
 data/raw/*.csv.gz
 data/processed/*.parquet
 backend/models/*.joblib
-backend/models/*.pkl
 artifacts/
 .opensearch_data/
 localstack_data/
