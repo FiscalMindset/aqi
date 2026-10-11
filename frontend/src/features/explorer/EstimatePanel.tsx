@@ -59,6 +59,18 @@ export function EstimatePanel({
           {t(`categories.${estimate.category}` as never)}
         </span>
       </div>
+      <div className="mb-2 mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+        <span
+          data-testid="served-by-chip"
+          className={`rounded-full px-2 py-0.5 font-medium ${
+            estimate.served_by === "model"
+              ? "bg-emerald-500/15 text-emerald-300"
+              : "bg-slate-700/60 text-slate-300"
+          }`}
+        >
+          {estimate.served_by === "model" ? "model estimate" : "nearest-station baseline"}
+        </span>
+      </div>
       <p className="text-sm text-slate-400 mt-1">
         {t("explorer.interval")}: {estimate.pm25_low.toFixed(0)} – {estimate.pm25_high.toFixed(0)}
       </p>

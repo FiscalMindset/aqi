@@ -4,11 +4,19 @@ import { SourceMap } from "./SourceMap";
 import { BottomSheet } from "../../components/BottomSheet";
 import { SearchBox } from "./SearchBox";
 import { EstimatePanel } from "./EstimatePanel";
+import { FeatureBreakdown } from "./FeatureBreakdown";
+import { ModelCardPanel } from "./ModelCardPanel";
 import { CausesPanel } from "./CausesPanel";
 import { PersonaCards } from "./PersonaCards";
 import { AgentTrace } from "./AgentTrace";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { useEstimate, useExplain, useSources, useStations } from "../../hooks/useApi";
+import {
+  useEstimate,
+  useExplain,
+  useModelCard,
+  useSources,
+  useStations,
+} from "../../hooks/useApi";
 
 const DELHI = { lat: 28.6139, lon: 77.209 };
 
@@ -36,6 +44,7 @@ export function Explorer() {
   const stations = useStations(point.lat, point.lon);
   const sources = useSources(point.lat, point.lon);
   const explain = useExplain(point.lat, point.lon, showTrace);
+  const modelCard = useModelCard();
 
   function selectPlace(lat: number, lon: number) {
     setPoint({ lat, lon });
@@ -45,6 +54,14 @@ export function Explorer() {
   const panel = (
     <div className="space-y-4">
       <EstimatePanel estimate={estimate.data} loading={estimate.isPending} error={estimate.error} />
+      {estimate.data && (
+        <FeatureBreakdown
+          features={estimate.data.features_used}
+          anchor={estimate.data.persistence_anchor_ugm3}
+          adjustment={estimate.data.model_adjustment_ugm3}
+          finalValue={estimate.data.pm25_mid}
+        />
+      )}
       <button
         type="button"
         data-testid="explain-toggle"
@@ -57,6 +74,7 @@ export function Explorer() {
       {showTrace && <AgentTrace explain={explain} />}
       {showTrace && explain.data && <CausesPanel attribution={explain.data.attribution} />}
       {showTrace && explain.data && <PersonaCards advice={explain.data.advice} />}
+      <ModelCardPanel card={modelCard.data ?? null} />
       <p className="text-xs text-slate-400">
         Nearest official station:{" "}
         {stations.data?.[0]
@@ -68,7 +86,7 @@ export function Explorer() {
 
   return (
     <div className="relative h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-3.5rem)] flex flex-col md:flex-row">
-      <div className="absolute inset-0 md:relative md:flex-1 md:order-1">
+      <div className="absolute inset-0 min-h-[45dvh] md:relative md:min-h-0 md:flex-1 md:order-1">
         <SourceMap
           lat={point.lat}
           lon={point.lon}
@@ -80,23 +98,31 @@ export function Explorer() {
       {isDesktop ? (
         <aside
           data-testid="desktop-panel"
-          className="hidden md:flex md:order-2 w-[26rem] lg:w-[32rem] shrink-0 flex-col overflow-y-auto border-l border-white/10 p-4 gap-4"
+          className="hidden md:flex md:order-2 w-[24rem] lg:w-[30rem] xl:w-[34rem] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-white/10 bg-slate-950/40 px-4 py-4 gap-4"
         >
           <SearchBox onSelect={selectPlace} />
           {panel}
         </aside>
       ) : (
-        <div className="md:hidden absolute inset-x-0 bottom-0 z-20">
+        <div className="md:hidden absolute inset-x-0 bottom-0 z-20 max-h-[55dvh] overflow-y-auto overscroll-contain">
           <BottomSheet
             full={false}
             peek={
-              <div className="p-4">
+              <div className="space-y-3 p-4">
                 <EstimatePanel
                   estimate={estimate.data}
                   loading={estimate.isPending}
                   error={estimate.error}
                   compact
                 />
+                {estimate.data && estimate.data.features_used.length > 0 && (
+                  <FeatureBreakdown
+                    features={estimate.data.features_used.slice(0, 3)}
+                    anchor={estimate.data.persistence_anchor_ugm3}
+                    adjustment={estimate.data.model_adjustment_ugm3}
+                    finalValue={estimate.data.pm25_mid}
+                  />
+                )}
               </div>
             }
           >

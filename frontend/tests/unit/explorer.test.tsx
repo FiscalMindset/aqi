@@ -65,6 +65,27 @@ const estimate = {
   cpcb_table_version: "2014-11",
   honesty: "Estimate, not a measurement.",
   demo_mode: true,
+  persistence_anchor_ugm3: 226,
+  model_adjustment_ugm3: -2.6,
+  method: "gradient-boosted-trees on persistence-anchored residual",
+  features_used: [
+    {
+      name: "station_lag24",
+      value: 226,
+      unit: "dimensionless",
+      reference: 0,
+      contribution_ugm3: -10.3,
+      absolute_effect_ugm3: 10.3,
+    },
+    {
+      name: "wind_dir_cos",
+      value: 0.74,
+      unit: "dimensionless",
+      reference: 1,
+      contribution_ugm3: 5.5,
+      absolute_effect_ugm3: 5.5,
+    },
+  ],
 };
 
 beforeEach(() => vi.restoreAllMocks());

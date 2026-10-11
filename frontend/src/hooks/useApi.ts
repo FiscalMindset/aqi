@@ -1,5 +1,14 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { api, type Estimate, type ExplainResponse, type SourcesResponse, type StationReading, type StatusResponse, type ValidationMetrics } from "../lib/api";
+import {
+  api,
+  type Estimate,
+  type ExplainResponse,
+  type ModelCard,
+  type SourcesResponse,
+  type StationReading,
+  type StatusResponse,
+  type ValidationMetrics,
+} from "../lib/api";
 
 export function useEstimate(
   lat: number,
@@ -48,6 +57,14 @@ export function useExplain(
     enabled,
     staleTime: 5 * 60 * 1000,
     retry: 1,
+  });
+}
+
+export function useModelCard(): UseQueryResult<ModelCard, Error> {
+  return useQuery({
+    queryKey: ["model-card"],
+    queryFn: api.model,
+    staleTime: 60 * 60 * 1000,
   });
 }
 

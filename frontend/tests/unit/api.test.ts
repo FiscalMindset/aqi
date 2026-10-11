@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api } from "../../src/lib/api";
+import { API_BASE, ApiError, api } from "../../src/lib/api";
 
-const BASE = "http://localhost:8000/v1";
+// Derive the expectation from the module itself. Hardcoding the host meant this
+// test silently depended on a local .env that is gitignored, so it broke for
+// anyone who did not have it.
+const BASE = API_BASE;
 
 function mockFetch(response: Response) {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));

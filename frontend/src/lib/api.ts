@@ -63,6 +63,50 @@ export interface Estimate {
   cpcb_table_version: string;
   honesty: string;
   demo_mode: boolean;
+  /** The nearest station's value 1h ago: the baseline the model corrects. */
+  persistence_anchor_ugm3: number | null;
+  /** What the model added/subtracted from that baseline. */
+  model_adjustment_ugm3: number | null;
+  /** How this number was produced. */
+  method: string;
+  /** Per-parameter effect on this particular estimate, in ug/m3. */
+  features_used: FeatureContribution[];
+}
+
+export interface FeatureContribution {
+  name: string;
+  value: number;
+  unit: string;
+  reference: number;
+  contribution_ugm3: number;
+  absolute_effect_ugm3: number;
+}
+
+export interface ModelMetrics {
+  n_train: number;
+  n_test: number;
+  mae: number;
+  rmse: number;
+  r2: number;
+  bias: number;
+  coverage80: number | null;
+  mean_width: number | null;
+}
+
+export interface ModelCard {
+  algorithm: string;
+  trained_at_utc: string;
+  snapshot_sha256: string;
+  n_rows: number;
+  stations: { location_id: number; rows: number }[];
+  temporal_holdout: ModelMetrics;
+  leave_one_station_out: ModelMetrics;
+  baselines: Record<string, ModelMetrics>;
+  winner: string;
+  features: string[];
+  n_features: number;
+  conformal_radius_ugm3: number;
+  notes: string[];
 }
 
 export interface SourceHit {
@@ -208,6 +252,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lat, lon }),
     }),
+  model: () => request<ModelCard>("/model"),
   validation: () => request<ValidationMetrics>("/validation"),
   status: () => request<StatusResponse>("/status"),
   subscribe: (body: {

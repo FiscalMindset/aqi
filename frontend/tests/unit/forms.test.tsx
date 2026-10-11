@@ -36,6 +36,10 @@ const estimate = {
   cpcb_table_version: "2014-11",
   honesty: "Estimate, not a measurement.",
   demo_mode: false,
+  persistence_anchor_ugm3: 226,
+  model_adjustment_ugm3: -2.6,
+  method: "persistence baseline",
+  features_used: [],
 };
 
 describe("Subscribe", () => {
