@@ -69,9 +69,9 @@ COPY --from=builder /build/demo_data ./demo_data
 # Mangum for the API; CMD=pipeline routes to the Step Functions task handlers.
 COPY backend/lambda_handler.py ./
 
+# NOTE: `lambda` must stay the LAST stage in this file. Docker picks the last
+# stage as the default target, and SAM passes DockerBuildArgs as --build-arg,
+# which does NOT select a stage. An earlier revision ended with a `dev` stage,
+# so SAM silently built the wrong image (CMD was an ASGI import string, not a
+# Lambda handler) and only warned that TARGET was unconsumed.
 CMD ["lambda_handler.handler"]
-
-# ------------------------------------------------------------------ dev -----
-FROM lambda AS dev
-EXPOSE 8080
-CMD ["dhuan.api.app:app"]

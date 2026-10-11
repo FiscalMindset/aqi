@@ -25,4 +25,8 @@ def handler(event: dict, context: object) -> dict:  # noqa: ANN001, ARG001
 
     from dhuan.api.app import app
 
-    return Mangum(app, lifespan="off").handler(event, context)
+    # Mangum's adapter is callable itself. `Mangum(app).handler` existed in
+    # older releases and is gone in mangum>=0.17, which surfaces as
+    # "AttributeError: 'Mangum' object has no attribute 'handler'" on every
+    # request.
+    return Mangum(app, lifespan="off")(event, context)

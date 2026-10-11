@@ -7,10 +7,23 @@ version = 0.1
 [staging]
 [staging.global]
 [staging.global.parameters]
-stack_name = "dhuan-detective-staging"
+# NOTE: "dhuan-detective-staging" is wedged in DELETE_FAILED on a phantom
+# ServerlessDeploymentApplication: this account has no CodeDeploy subscription,
+# so the resource can neither be created nor deleted. aws_journey.md has the
+# full story. Until CodeDeploy is enabled the stack deploys without canary.
+stack_name = "dhuan-detective-stg"
 region = "ap-south-1"
 capabilities = "CAPABILITY_IAM"
-image_repositories = []
+# SAM resolves/pushes image tags through the ECR API (which resolves via
+# *.dkr.ecr.*), then rewrites the template to the returned ImageUri.
+# Both functions are built from one Dockerfile, so SAM deduplicates them into a
+# single image. Pointing them at two different tags makes SAM reference a tag
+# that was never pushed ("Source image ...:pipelinefunction:apifunction-<sha>
+# is not valid"), so they must share one repository reference.
+image_repositories = [
+  "ApiFunction=609394381612.dkr.ecr.ap-south-1.amazonaws.com/dhuan-backend",
+  "PipelineFunction=609394381612.dkr.ecr.ap-south-1.amazonaws.com/dhuan-backend",
+]
 
 [prod]
 [prod.global]

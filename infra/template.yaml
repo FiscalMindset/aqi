@@ -13,19 +13,57 @@ Parameters:
   BedrockModelId:
     Type: String
     Description: Bedrock model id for the agents (never hardcoded; set per deployment).
+
   OpensearchEndpoint:
     Type: String
-    Description: OpenSearch domain endpoint (created manually or via console).
+    Default: ""
+    Description: >
+      OpenSearch domain endpoint. Optional: when empty the API serves source
+      lookups from the static OSM extract bundled in the image (smaller,
+      coarser) and reports sources_unavailable instead of inventing data.
+  DemoMode:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Serve recorded OpenAQ archive readings from the image instead of calling
+      the live feed. Every response is tagged demo_mode:true and the web app
+      shows a permanent banner. Turn this off once OPENAQ_API_KEY is stored in
+      SSM under /dhuan/openaq-api-key.
+  EnableWebCdn:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Create the CloudFront distribution in front of the web bucket. A brand
+      new AWS account is rejected with "Your account must be verified before you
+      can add new CloudFront resources", which fails the whole stack. Keep it
+      false until the account is verified, then deploy with true and set the web
+      app's VITE_API_BASE to the API URL output.
   WebBucketName:
     Type: String
-    Description: S3 bucket for the built web app (created by the CD workflow).
-  CertificateArn:
-    Type: String
-    Description: ACM certificate ARN for the API custom domain (optional).
-  DomainName:
-    Type: String
     Default: ""
-    Description: Custom domain for the API (optional; skip for staging).
+    Description: >
+      S3 bucket for the built web app. Leave empty to let CloudFormation
+      generate a unique name; the value is published as the WebBucket output
+      and the CD workflow syncs dist/ into it.
+# Canary deployment note: SAM's transform requires a literal
+# DeploymentPreference.Type, so it cannot be switched on with Fn::If. On an
+# account without CodeDeploy enabled ("The AWS Access Key Id needs a
+# subscription for the service") the stack fails to create, so the property is
+# omitted here. Rollback safety comes from AutoPublishAlias plus the smoke test
+# in scripts/smoke.py. See docs/DEPLOYMENT.md for the canary overlay.
+#
+# Custom domains are not wired yet. The API is served through the default
+# execute-api hostname, which API Gateway already TLS-terminates, and the web
+# app through its CloudFront distribution (see the WebUrl output). Adding a
+# custom domain later means: ACM cert in us-east-1, an API Gateway DomainName,
+# and a Route 53 alias - not a change to the functions themselves.
+
+Conditions:
+  WebBucketNameProvided: !Not [!Equals [!Ref WebBucketName, ""]]
+  WebCdnEnabled: !Equals [!Ref EnableWebCdn, "true"]
+  WebCdnDisabled: !Equals [!Ref EnableWebCdn, "false"]
 
 Globals:
   Function:
@@ -37,6 +75,7 @@ Globals:
       Variables:
         ENV: !Ref Environment
         LOG_LEVEL: INFO
+        DEMO_MODE: !Ref DemoMode
         BEDROCK_MODEL_ID: !Ref BedrockModelId
         OPENSEARCH_ENDPOINT: !Ref OpensearchEndpoint
         OPENSEARCH_INDEX: sources
@@ -114,10 +153,38 @@ Resources:
   WebBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Ref WebBucketName
+      BucketName: !If
+        - WebBucketNameProvided
+        - !Ref WebBucketName
+        - !Ref AWS::NoValue
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: false
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: false
+
+  # Without the CDN (accounts that are not yet verified cannot create
+  # CloudFront distributions) the bucket itself must serve the site, so grant
+  # anonymous reads. A PWA contains no secrets, and the bucket holds only
+  # build output, so this is safe for staging. When the CDN is enabled this
+  # policy is replaced by WebBucketPolicy (OAC-signed access).
+  WebBucketPublicReadPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: WebCdnDisabled
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadStagingWebApp
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub ${WebBucket.Arn}/*
 
   WebBucketPolicy:
     Type: AWS::S3::BucketPolicy
+    Condition: WebCdnEnabled
     Properties:
       Bucket: !Ref WebBucket
       PolicyDocument:
@@ -133,6 +200,7 @@ Resources:
 
   WebDistribution:
     Type: AWS::CloudFront::Distribution
+    Condition: WebCdnEnabled
     Properties:
       DistributionConfig:
         Enabled: true
@@ -168,6 +236,7 @@ Resources:
 
   WebOAC:
     Type: AWS::CloudFront::OriginAccessControl
+    Condition: WebCdnEnabled
     Properties:
       OriginAccessControlConfig:
         Name: !Sub dhuan-web-oac-${Environment}
@@ -182,6 +251,11 @@ Resources:
       Name: !Sub dhuan-api-${Environment}
       EndpointConfiguration:
         Types: [REGIONAL]
+      # Mangum returns isBase64Encoded=false with content-type application/json,
+      # but a REST API with no BinaryMediaTypes entry still base64-wraps the body
+      # for ANY-proxy integrations. '*/*' makes API Gateway pass it through verbatim.
+      BinaryMediaTypes:
+        - "*/*"
 
   ApiUsagePlan:
     Type: AWS::ApiGateway::UsagePlan
@@ -200,7 +274,13 @@ Resources:
   ApiStage:
     Type: AWS::ApiGateway::Stage
     Properties:
-      StageName: v1
+      # The stage name becomes part of every public URL
+      # (https://<api-id>.execute-api.<region>.amazonaws.com/<stage>/<path>).
+      # Naming it "v1" collides with the application's own /v1 route prefix:
+      # a request for /v1/estimate is then read as stage "v1" + path "/estimate",
+      # which the FastAPI app does not serve -> 404 on every /v1/* route. Using
+      # the environment name keeps the URL honest: /staging/v1/estimate.
+      StageName: !Ref Environment
       RestApiId: !Ref ApiGatewayRestApi
       DeploymentId: !Ref ApiDeployment
       MethodSettings:
@@ -213,10 +293,19 @@ Resources:
           ThrottlingBurstLimit: 20
           ThrottlingRateLimit: 10
 
+  # A Deployment snapshots the API as it is at creation time. Without the
+  # DependsOn, CloudFormation creates it in parallel with the Method (it only
+  # Refs the RestApi) and the race produces:
+  #   "The REST API doesn't contain any methods (Service: ApiGateway, 400)"
+  # because the snapshot was taken before any method existed.
   ApiDeployment:
     Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ApiGatewayMethod
+      - ApiGatewayRootMethod
     Properties:
       RestApiId: !Ref ApiGatewayRestApi
+      Description: Dhuan Detective API deployment
 
   ApiGatewayResource:
     Type: AWS::ApiGateway::Resource
@@ -230,6 +319,20 @@ Resources:
     Properties:
       RestApiId: !Ref ApiGatewayRestApi
       ResourceId: !Ref ApiGatewayResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFunction.Arn}/invocations
+
+  # {proxy+} requires at least one path segment, so GET / would 403 without
+  # this root-level ANY method.
+  ApiGatewayRootMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !GetAtt ApiGatewayRestApi.RootResourceId
       HttpMethod: ANY
       AuthorizationType: NONE
       Integration:
@@ -251,8 +354,6 @@ Resources:
     Metadata:
       Dockerfile: backend/Dockerfile
       DockerContext: ..
-      DockerBuildArgs:
-        TARGET: lambda
     Properties:
       FunctionName: !Sub dhuan-api-${Environment}
       PackageType: Image
@@ -260,10 +361,6 @@ Resources:
       Timeout: 30
       Architectures: [arm64]
       AutoPublishAlias: live
-      DeploymentPreference:
-        Type: Canary10Percent5Minutes
-        Alarms:
-          - !Ref ApiErrorAlarm
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: '2012-10-17'
@@ -300,8 +397,6 @@ Resources:
     Metadata:
       Dockerfile: backend/Dockerfile
       DockerContext: ..
-      DockerBuildArgs:
-        TARGET: lambda
     Properties:
       FunctionName: !Sub dhuan-pipeline-${Environment}
       PackageType: Image
@@ -327,8 +422,14 @@ Resources:
     Properties:
       Name: !Sub dhuan-pipeline-${Environment}
       DefinitionUri: state-machine.asl.json
+      # With DefinitionUri, CloudFormation does NOT run Fn::Sub over the file -
+      # it only replaces the keys listed here. The ASL therefore references a
+      # single ${PipelineFunctionArn}; the earlier ${AWS::Region} /
+      # ${AWS::AccountId} placeholders survived into the deployed definition and
+      # failed at runtime with "The resource belongs to a different region from
+      # the running execution. Expected 'ap-south-1', was '${AWS".
       DefinitionSubstitutions:
-        PipelineFunctionName: !Ref PipelineFunction
+        PipelineFunctionArn: !GetAtt PipelineFunction.Arn
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref PipelineFunction
@@ -351,7 +452,10 @@ Resources:
       ScheduleExpression: rate(30 days)
       State: ENABLED
       Targets:
-        - Arn: !Ref PipelineFunction
+        # EventBridge needs the function ARN; !Ref on a Function returns its
+        # name, which EventBridge rejects with "Provided Arn is not in correct
+        # format" (400).
+        - Arn: !GetAtt PipelineFunction.Arn
           Id: dhuan-source-refresh
           Input: '{"task": "refresh_sources"}'
           RoleArn: !GetAtt PipelineEventsRole.Arn
@@ -426,12 +530,21 @@ Resources:
 
 Outputs:
   ApiUrl:
-    Description: API base URL (CloudFront domain)
-    Value: !Sub https://${WebDistribution.DomainName}
+    Description: >-
+      Public API base URL. The API itself is always served by API Gateway; the
+      CloudFront domain in front of the web app is separate (see WebUrl).
+    Value: !Sub https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/v1
 
   WebUrl:
-    Description: Web app URL
-    Value: !Sub https://${WebDistribution.DomainName}
+    Description: Web app URL, or the raw S3 origin when the CDN is disabled.
+    Value: !If
+      - WebCdnEnabled
+      - !Sub https://${WebDistribution.DomainName}
+      - !Sub https://${WebBucket.RegionalDomainName}
+
+  IsWebCdnEnabled:
+    Description: Whether the CloudFront distribution was created ("true"/"false").
+    Value: !Ref EnableWebCdn
 
   StateMachineArn:
     Value: !Ref StateMachine

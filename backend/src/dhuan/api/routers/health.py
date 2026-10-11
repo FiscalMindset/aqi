@@ -35,13 +35,21 @@ def _check_dynamodb(settings: Settings) -> ReadyCheck:
 
     try:
         client = dynamodb_client(settings)
-        tables = client.list_tables().get("TableNames", [])
-        expected = {
+        # DescribeTable on the three named tables, not ListTables: the function
+        # role is scoped to those table ARNs, and ListTables needs
+        # dynamodb:ListTables on "*". A readiness probe should not force a
+        # broader permission than the workload itself needs.
+        expected = (
             settings.dynamodb_table_estimates,
             settings.dynamodb_table_feeds,
             settings.dynamodb_table_subscriptions,
-        }
-        missing = expected - set(tables)
+        )
+        missing = []
+        for name in expected:
+            try:
+                client.describe_table(TableName=name)
+            except client.exceptions.ResourceNotFoundException:
+                missing.append(name)
         return ReadyCheck(
             component="dynamodb",
             ok=not missing,
@@ -52,6 +60,12 @@ def _check_dynamodb(settings: Settings) -> ReadyCheck:
 
 
 def _check_opensearch(settings: Settings) -> ReadyCheck:
+    if not settings.opensearch_endpoint.strip():
+        # Not deployed (small instance): source lookups use the static OSM
+        # extract bundled in the image. Not a failure - say what is in use.
+        return ReadyCheck(
+            component="opensearch", ok=True, detail="not deployed; using static extract"
+        )
     try:
         index = get_source_index(settings)
         count = index.count()

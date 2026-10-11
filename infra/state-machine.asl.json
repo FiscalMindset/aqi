@@ -6,12 +6,11 @@
       "Type": "Parallel",
       "Branches": [
         {
-          "Name": "stations",
           "StartAt": "IngestStations",
           "States": {
             "IngestStations": {
               "Type": "Task",
-              "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+              "Resource": "${PipelineFunctionArn}",
               "Parameters": {
                 "task": "ingest_stations"
               },
@@ -28,27 +27,18 @@
                   "JitterStrategy": "FULL"
                 }
               ],
-              "Catch": [
-                {
-                  "ErrorEquals": [
-                    "States.ALL"
-                  ],
-                  "Next": "RecordFeedFailure",
-                  "ResultPath": "$.error"
-                }
-              ],
-              "ResultPath": "$.ingested[-1]",
+              "ResultPath": "$.ingested.station",
               "End": true
             }
-          }
+          },
+          "Comment": "stations"
         },
         {
-          "Name": "weather",
           "StartAt": "IngestWeather",
           "States": {
             "IngestWeather": {
               "Type": "Task",
-              "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+              "Resource": "${PipelineFunctionArn}",
               "Parameters": {
                 "task": "ingest_weather"
               },
@@ -65,27 +55,18 @@
                   "JitterStrategy": "FULL"
                 }
               ],
-              "Catch": [
-                {
-                  "ErrorEquals": [
-                    "States.ALL"
-                  ],
-                  "Next": "RecordFeedFailure",
-                  "ResultPath": "$.error"
-                }
-              ],
-              "ResultPath": "$.ingested[-1]",
+              "ResultPath": "$.ingested.station",
               "End": true
             }
-          }
+          },
+          "Comment": "weather"
         },
         {
-          "Name": "fires",
           "StartAt": "IngestFires",
           "States": {
             "IngestFires": {
               "Type": "Task",
-              "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+              "Resource": "${PipelineFunctionArn}",
               "Parameters": {
                 "task": "ingest_fires"
               },
@@ -102,18 +83,28 @@
                   "JitterStrategy": "FULL"
                 }
               ],
-              "ResultPath": "$.ingested[-1]",
+              "ResultPath": "$.ingested.station",
               "End": true
             }
-          }
+          },
+          "Comment": "fires"
         }
       ],
       "ResultPath": "$.ingested",
-      "Next": "ValidateAndMerge"
+      "Next": "ValidateAndMerge",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "RecordFeedFailure",
+          "ResultPath": "$.error"
+        }
+      ]
     },
     "ValidateAndMerge": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Resource": "${PipelineFunctionArn}",
       "Parameters": {
         "task": "validate_and_merge",
         "ingested.$": "$.ingested"
@@ -133,12 +124,11 @@
     },
     "PredictGrid": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Resource": "${PipelineFunctionArn}",
       "Parameters": {
         "task": "predict_grid"
       },
       "TimeoutSeconds": 600,
-      "Memory": 1024,
       "Retry": [
         {
           "ErrorEquals": [
@@ -164,7 +154,7 @@
     },
     "PersistEstimates": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Resource": "${PipelineFunctionArn}",
       "Parameters": {
         "task": "persist_estimates",
         "predictions.$": "$.prediction.predictions"
@@ -184,7 +174,7 @@
     },
     "EvaluateAlerts": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Resource": "${PipelineFunctionArn}",
       "Parameters": {
         "task": "evaluate_alerts",
         "predictions.$": "$.prediction.predictions"
@@ -204,7 +194,7 @@
     },
     "PublishAlerts": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Resource": "${PipelineFunctionArn}",
       "Parameters": {
         "task": "publish_alerts",
         "alerts.$": "$.alert_eval.alerts"
@@ -233,7 +223,7 @@
     },
     "RecordFeedFailure": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Resource": "${PipelineFunctionArn}",
       "Parameters": {
         "task": "failure_recorded",
         "error.$": "$.error"

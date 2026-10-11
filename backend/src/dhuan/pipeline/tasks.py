@@ -315,6 +315,36 @@ def get_settings_for_pipeline() -> Any:
     return get_settings()
 
 
+def refresh_sources(_event: dict[str, Any]) -> dict[str, Any]:
+    """Re-pull OSM sources for the NCR bbox and reindex them.
+
+    Driven by the EventBridge `rate(30 days)` rule. Fails soft: if Overpass is
+    unreachable the already-indexed sources stay in place and we say so rather
+    than reporting a refresh that did not happen.
+    """
+    import asyncio
+
+    from dhuan.core.config import get_settings
+    from dhuan.ingest.osm import fetch_sources_for_bbox
+    from dhuan.store.opensearch import SourceIndex
+
+    settings = get_settings()
+    b = settings.delhi_bbox
+    west, south, east, north = b.min_lon, b.min_lat, b.max_lon, b.max_lat
+    try:
+        docs = asyncio.run(fetch_sources_for_bbox(west, south, east, north, settings))
+    except Exception as exc:
+        logger.warning("source_refresh_failed: %s", exc)
+        record("SourceRefreshFailures", 1)
+        return {"refreshed": False, "reason": str(exc)[:200]}
+    index = SourceIndex(settings)
+    index.ensure_index()
+    count = index.bulk_index([d.to_index_dict() for d in docs])
+    index.close()
+    record("SourcesRefreshed", count)
+    return {"refreshed": True, "count": count}
+
+
 def failure_recorded(event: dict[str, Any]) -> dict[str, Any]:
     """Catch-block entry: record the failure and emit a metric (never silent)."""
     error = event.get("error") or "unknown"
@@ -333,6 +363,7 @@ HANDLERS = {
     "evaluate_alerts": evaluate_alerts,
     "publish_alerts": publish_alerts,
     "failure_recorded": failure_recorded,
+    "refresh_sources": refresh_sources,
 }
 
 

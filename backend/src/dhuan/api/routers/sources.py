@@ -7,7 +7,7 @@ heuristic influence score, plus the ODbL attribution for OSM data.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
@@ -16,11 +16,39 @@ from dhuan.api.errors import outside_coverage_problem
 from dhuan.api.models import SourceOut, SourcesResponse
 from dhuan.api.services import weather_now
 from dhuan.core.config import Settings, get_settings
-from dhuan.core.units import Point
+from dhuan.core.units import Point, haversine_km
 from dhuan.geo.boundary import point_in_ncr
+from dhuan.geo.geo_math import initial_bearing_deg
+from dhuan.model.predict import static_sources_default
 from dhuan.store.opensearch import SourceIndex
 
 router = APIRouter(prefix="/v1", tags=["sources"])
+
+
+def _static_hits(lat: float, lon: float, radius_km: float, limit: int) -> list[dict[str, Any]]:
+    """Rank the bundled OSM extract by distance for a point."""
+    hits: list[dict[str, Any]] = []
+    origin = Point(lat=lat, lon=lon)
+    for src in static_sources_default():
+        target = Point(lat=src.lat, lon=src.lon)
+        dist = haversine_km(origin, target)
+        if dist > radius_km:
+            continue
+        hits.append(
+            {
+                "osm_id": f"static-{src.kind}-{src.lat:.4f}-{src.lon:.4f}",
+                "type": src.kind,
+                "name": src.kind.replace("_", " ").title(),
+                "location": {"lat": src.lat, "lon": src.lon},
+                "distance_km": round(dist, 3),
+                "bearing_deg": initial_bearing_deg(origin, target),
+                "in_upwind_cone": False,
+                "influence_score": round(max(0.0, 1.0 - dist / max(radius_km, 1e-6)), 4),
+                "area_m2": None,
+            }
+        )
+    hits.sort(key=lambda h: float(h["distance_km"]))
+    return hits[:limit]
 
 
 @router.get(
@@ -48,14 +76,23 @@ async def sources(  # noqa: PLR0917 - geo params stay positional
         if outcome.data is not None:
             wind_deg = outcome.data.wind_direction_deg
 
-    hits = index.sources_near(
-        lat=lat,
-        lon=lon,
-        radius_km=radius_km,
-        upwind=bool(upwind and wind_deg is not None),
-        wind_from_deg=wind_deg,
-        limit=limit,
-    )
+    # No OpenSearch endpoint configured (small deployments, local runs): fall
+    # back to the static OSM extract bundled in the image rather than failing
+    # with a 404. The response still reports which lookup was used.
+    lookup = "opensearch"
+    hits: list[dict[str, Any]] = []
+    if not settings.opensearch_endpoint.strip():
+        hits = _static_hits(lat, lon, radius_km, limit)
+        lookup = "static-extract"
+    else:
+        hits = index.sources_near(
+            lat=lat,
+            lon=lon,
+            radius_km=radius_km,
+            upwind=bool(upwind and wind_deg is not None),
+            wind_from_deg=wind_deg,
+            limit=limit,
+        )
     sources = [
         SourceOut(
             osm_id=str(h.get("osm_id", "")),
@@ -72,7 +109,14 @@ async def sources(  # noqa: PLR0917 - geo params stay positional
         for h in hits
     ]
     return SourcesResponse(
-        query={"lat": lat, "lon": lon, "radius_km": radius_km, "upwind": upwind, "limit": limit},
+        query={
+            "lat": lat,
+            "lon": lon,
+            "radius_km": radius_km,
+            "upwind": upwind,
+            "limit": limit,
+            "lookup": lookup,
+        },
         wind_from_deg=wind_deg,
         count=len(sources),
         sources=sources,
