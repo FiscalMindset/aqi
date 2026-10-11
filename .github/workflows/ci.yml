@@ -205,7 +205,7 @@ jobs:
           pip install bandit
           bandit -r backend/src -ll -ii
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: npm audit
