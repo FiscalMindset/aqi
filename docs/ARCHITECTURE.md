@@ -138,4 +138,4 @@ erDiagram
 
 ## Design decisions
 
-Every major decision is recorded as an ADR in [docs/adr/](adr/): the 8% coverage threshold, the estimate-serving rule (better of model vs nearest-station baseline), the agent backend abstraction, H3 resolution 8, and more.
+Every major decision is recorded as an ADR in the [ADR index](adr/index.md): the 8% coverage threshold, the estimate-serving rule (better of model vs nearest-station baseline), the agent backend abstraction, H3 resolution 8, and more.

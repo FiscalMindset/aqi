@@ -1,3 +1,5 @@
+docs_dir: .
+site_dir: ../site
 site_name: Dhuan Detective
 site_description: Street-level PM2.5 estimation, source attribution and advice for Delhi-NCR
 site_url: https://fiscalmindset.github.io/aqi/
@@ -33,9 +35,6 @@ theme:
 
 nav:
   - Home: index.md
-  - Product:
-      - README: ../README.md
-      - Story: ../explain.md
   - Engineering:
       - Rules: RULES.md
       - Technology stack: TECHNOLOGY_STACK.md
