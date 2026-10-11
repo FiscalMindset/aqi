@@ -88,6 +88,9 @@ ignore = [
 "tests/*" = ["ANN", "S", "PLR", "ARG", "SLF001", "PLR2004", "PLC0415", "BLE001", "SIM105"]
 # FastAPI's documented DI pattern calls Depends() in default arguments.
 "src/dhuan/api/*" = ["B008"]
+# Lambda task handlers import lazily to keep cold starts small.
+"src/dhuan/pipeline/*" = ["PLC0415"]
+"src/dhuan/alerts/*" = ["PLC0415"]
 
 [tool.mypy]
 python_version = "3.12"

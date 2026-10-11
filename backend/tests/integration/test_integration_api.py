@@ -107,3 +107,56 @@ def test_ready_reflects_containers(api: TestClient) -> None:
     if resp.status_code == 200:
         body = resp.json()
         assert {c["component"] for c in body["checks"]} >= {"dynamodb", "opensearch"}
+
+
+def test_subscription_create_idempotent_and_delete(
+    dynamodb: object, api: TestClient, env: dict[str, str]
+) -> None:
+    payload = {
+        "email": "rohini.parent@example.com",
+        "locality": "Rohini",
+        "lat": 28.7146,
+        "lon": 77.1025,
+        "threshold_category": "Poor",
+    }
+    first = api.post("/v1/subscriptions", json=payload)
+    assert first.status_code == 201, first.text
+    body = first.json()
+    assert body["status"] == "pending_confirmation"
+    sub_id = body["id"]
+
+    again = api.post("/v1/subscriptions", json=payload)
+    assert again.status_code == 201
+    assert again.json()["id"] == sub_id
+    assert again.json()["status"] == "pending_confirmation"
+
+    deleted = api.delete(f"/v1/subscriptions/{sub_id}")
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "unsubscribed"
+
+
+def test_subscription_rejects_outside_coverage(api: TestClient) -> None:
+    payload = {
+        "email": "x@example.com",
+        "locality": "Mumbai",
+        "lat": 19.076,
+        "lon": 72.877,
+        "threshold_category": "Poor",
+    }
+    resp = api.post("/v1/subscriptions", json=payload)
+    assert resp.status_code == 422
+    assert resp.headers["content-type"].startswith("application/problem+json")
+
+
+def test_subscription_rejects_bad_threshold(api: TestClient) -> None:
+    resp = api.post(
+        "/v1/subscriptions",
+        json={
+            "email": "x@example.com",
+            "locality": "Rohini",
+            "lat": 28.7146,
+            "lon": 77.1025,
+            "threshold_category": "Apocalyptic",
+        },
+    )
+    assert resp.status_code == 422

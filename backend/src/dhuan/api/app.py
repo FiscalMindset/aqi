@@ -26,6 +26,7 @@ from dhuan.api.routers import (
     sources,
     stations,
     status,
+    subscriptions,
     validation,
 )
 from dhuan.core.config import get_settings
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(grid.router)
     app.include_router(validation.router)
     app.include_router(explain.router)
+    app.include_router(subscriptions.router)
 
     if settings.demo_mode:
 

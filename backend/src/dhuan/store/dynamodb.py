@@ -181,6 +181,7 @@ class SubscriptionsStore:
         lon: float,
         threshold_category: str,
         confirmed: bool = False,
+        pending_token: str | None = None,
     ) -> str:
         sub_id = self.make_id(email, locality)
         now = datetime.now(UTC)
@@ -197,7 +198,7 @@ class SubscriptionsStore:
                 # hysteresis bookkeeping
                 "last_band": None,
                 "last_alerted_at": None,
-                "pending_unsubscribe_token": None,
+                "pending_token": pending_token,
             },
             ConditionExpression="attribute_not_exists(pk)",
         )

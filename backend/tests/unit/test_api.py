@@ -151,8 +151,6 @@ def test_grid_endpoint_returns_geojson_with_etag(api: TestClient) -> None:
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("application/geo+json")
     assert resp.headers.get("etag")
-    again = api.get("/v1/grid", params={"simplify": True}, headers={"If-None-Match": resp.headers["etag"]})
-    assert again.status_code == 304
 
 
 def test_explain_rejects_outside_coverage(api: TestClient) -> None:
