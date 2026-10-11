@@ -67,6 +67,9 @@ COPY --from=builder /build/data ./data
 COPY --from=builder /build/demo_data ./demo_data
 
 # Mangum for the API; CMD=pipeline routes to the Step Functions task handlers.
+# Built web app, served by the API so there is a single public URL.
+COPY frontend/dist ./web
+
 COPY backend/lambda_handler.py ./
 
 # NOTE: `lambda` must stay the LAST stage in this file. Docker picks the last

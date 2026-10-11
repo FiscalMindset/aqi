@@ -3,12 +3,23 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "tailwindcss";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Vite emits absolute asset URLs by default ("/assets/x.js"). When the app is
+// served from an API Gateway stage path such as /staging/, the browser resolves
+// those against the domain root instead of /staging/, so every JS/CSS request
+// 403s and the page renders blank. VITE_BASE_PATH must therefore match the
+// public path the app is served from.
+const base = process.env.VITE_BASE_PATH ?? "/";
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      // Scope the service worker under the same base so it does not try to
+      // control (and fail to fetch) assets at the domain root.
+      scope: base,
       includeAssets: ["favicon.svg", "robots.txt"],
       manifest: {
         name: "Dhuan Detective",

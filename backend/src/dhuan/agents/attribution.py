@@ -150,7 +150,21 @@ async def explain(
         raise outside_coverage_problem(lat, lon)
 
     agent, served_by = build_agent(s)
-    result = await agent.run(lat, lon, system=f"{SYSTEM_PREAMBLE}\n\n{ATTRIBUTION_SYSTEM}")
+    try:
+        result = await agent.run(lat, lon, system=f"{SYSTEM_PREAMBLE}\n\n{ATTRIBUTION_SYSTEM}")
+    except Exception as exc:
+        # The backend can fail at call time, not just at construction: an
+        # account without Bedrock model access builds BedrockBackend fine
+        # (the model id is just a string) and only fails on InvokeModel with
+        # AccessDenied. Serving a deterministic explanation with the same tools
+        # and the same evidence rules is honest; returning a 500 is not.
+        if served_by == "scripted-deterministic":
+            raise
+        logger.warning("bedrock_run_failed_falling_back: %s", exc)
+        record("AgentBedrockRunFallback", 1)
+        agent = AttributionAgent(default_registry(), ScriptedBackend())
+        served_by = "scripted-deterministic"
+        result = await agent.run(lat, lon, system=f"{SYSTEM_PREAMBLE}\n\n{ATTRIBUTION_SYSTEM}")
     estimate_obj = await estimate_route(lat, lon, s)
     estimate = {
         "pm25_mid": estimate_obj.pm25_mid,

@@ -162,6 +162,16 @@ Resources:
         BlockPublicPolicy: false
         IgnorePublicAcls: true
         RestrictPublicBuckets: false
+      # Website hosting is what makes the app usable before CloudFront is
+      # available: the REST endpoint does not resolve "/" to index.html, so
+      # https://bucket.s3.<region>.amazonaws.com/ returns 403 and every deep
+      # link 403s as well, which the React router surfaces as
+      # "Unexpected Application Error! 404 Not Found".
+      # ErrorDocument: index.html gives the SPA the catch-all it needs for
+      # client-side routes (/methodology, /subscribe, ...).
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
 
   # Without the CDN (accounts that are not yet verified cannot create
   # CloudFront distributions) the bucket itself must serve the site, so grant
@@ -223,7 +233,8 @@ Resources:
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           Compress: true
         CacheBehaviors:
-          - PathPattern: /v1/*
+          # The API is served under /<stage>/v1/*, not /v1/*
+          - PathPattern: /staging/*
             TargetOriginId: api
             ViewerProtocolPolicy: https-only
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5f1b7b0e4b
@@ -540,7 +551,7 @@ Outputs:
     Value: !If
       - WebCdnEnabled
       - !Sub https://${WebDistribution.DomainName}
-      - !Sub https://${WebBucket.RegionalDomainName}
+      - !Sub http://${WebBucket.RegionalDomainName}
 
   IsWebCdnEnabled:
     Description: Whether the CloudFront distribution was created ("true"/"false").

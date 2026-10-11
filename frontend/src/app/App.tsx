@@ -15,7 +15,13 @@ const queryClient = new QueryClient({
   },
 });
 
-const router = createBrowserRouter(routes);
+// React Router must be told the public base path. Served from an API Gateway
+// stage (/staging/), the browser URL is /staging/... while the routes are
+// defined at /, so without a basename every navigation 404s into the router's
+// error boundary ("Unexpected Application Error! 404 Not Found").
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const router = createBrowserRouter(routes, { basename: base });
 
 export function App() {
   return (

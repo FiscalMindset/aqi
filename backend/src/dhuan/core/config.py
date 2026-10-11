@@ -87,6 +87,8 @@ class Settings(BaseSettings):
 
     # demo data (recorded fixtures, only used when DEMO_MODE=1)
     demo_data_dir: str = ""
+    # Built web app served by the API Lambda (single public URL).
+    web_dir: str = "/var/task/web"
 
     @field_validator("demo_mode", "sms_enabled", mode="before")
     @classmethod
