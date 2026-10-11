@@ -249,8 +249,8 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Metadata:
-      Dockerfile: Dockerfile
-      DockerContext: ../backend
+      Dockerfile: backend/Dockerfile
+      DockerContext: ..
       DockerBuildArgs:
         TARGET: lambda
     Properties:
@@ -298,8 +298,8 @@ Resources:
   PipelineFunction:
     Type: AWS::Serverless::Function
     Metadata:
-      Dockerfile: Dockerfile
-      DockerContext: ../backend
+      Dockerfile: backend/Dockerfile
+      DockerContext: ..
       DockerBuildArgs:
         TARGET: lambda
     Properties:
