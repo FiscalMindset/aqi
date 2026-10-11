@@ -1,0 +1,250 @@
+{
+  "Comment": "Dhuan Detective hourly pipeline: parallel ingest -> validate -> predict -> persist -> alerts -> publish",
+  "StartAt": "FanOutIngest",
+  "States": {
+    "FanOutIngest": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "Name": "stations",
+          "StartAt": "IngestStations",
+          "States": {
+            "IngestStations": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+              "Parameters": {
+                "task": "ingest_stations"
+              },
+              "TimeoutSeconds": 120,
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.TaskFailed",
+                    "States.Timeout"
+                  ],
+                  "IntervalSeconds": 10,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "Next": "RecordFeedFailure",
+                  "ResultPath": "$.error"
+                }
+              ],
+              "ResultPath": "$.ingested[-1]",
+              "End": true
+            }
+          }
+        },
+        {
+          "Name": "weather",
+          "StartAt": "IngestWeather",
+          "States": {
+            "IngestWeather": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+              "Parameters": {
+                "task": "ingest_weather"
+              },
+              "TimeoutSeconds": 120,
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.TaskFailed",
+                    "States.Timeout"
+                  ],
+                  "IntervalSeconds": 10,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "Next": "RecordFeedFailure",
+                  "ResultPath": "$.error"
+                }
+              ],
+              "ResultPath": "$.ingested[-1]",
+              "End": true
+            }
+          }
+        },
+        {
+          "Name": "fires",
+          "StartAt": "IngestFires",
+          "States": {
+            "IngestFires": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+              "Parameters": {
+                "task": "ingest_fires"
+              },
+              "TimeoutSeconds": 120,
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.TaskFailed",
+                    "States.Timeout"
+                  ],
+                  "IntervalSeconds": 10,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "ResultPath": "$.ingested[-1]",
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": "$.ingested",
+      "Next": "ValidateAndMerge"
+    },
+    "ValidateAndMerge": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Parameters": {
+        "task": "validate_and_merge",
+        "ingested.$": "$.ingested"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.merge",
+      "Next": "PredictGrid"
+    },
+    "PredictGrid": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Parameters": {
+        "task": "predict_grid"
+      },
+      "TimeoutSeconds": 600,
+      "Memory": 1024,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "States.Timeout"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "RecordFeedFailure",
+          "ResultPath": "$.error"
+        }
+      ],
+      "ResultPath": "$.prediction",
+      "Next": "PersistEstimates"
+    },
+    "PersistEstimates": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Parameters": {
+        "task": "persist_estimates",
+        "predictions.$": "$.prediction.predictions"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.persist",
+      "Next": "EvaluateAlerts"
+    },
+    "EvaluateAlerts": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Parameters": {
+        "task": "evaluate_alerts",
+        "predictions.$": "$.prediction.predictions"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.alert_eval",
+      "Next": "PublishAlerts"
+    },
+    "PublishAlerts": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Parameters": {
+        "task": "publish_alerts",
+        "alerts.$": "$.alert_eval.alerts"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "RecordFeedFailure",
+          "ResultPath": "$.error"
+        }
+      ],
+      "ResultPath": "$.publish",
+      "End": true
+    },
+    "RecordFeedFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${PipelineFunctionName}",
+      "Parameters": {
+        "task": "failure_recorded",
+        "error.$": "$.error"
+      },
+      "ResultPath": "$.failure",
+      "Next": "FailPipeline"
+    },
+    "FailPipeline": {
+      "Type": "Fail",
+      "Error": "PipelineStageFailed",
+      "Cause": "A pipeline stage failed after retries; feed status and metrics were recorded."
+    }
+  }
+}

@@ -1,0 +1,441 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Dhuan Detective - street-level PM2.5 estimation, source attribution and advice
+  for Delhi-NCR. API (FastAPI container on Lambda), Step Functions pipeline,
+  DynamoDB tables, SNS alerts, S3 + CloudFront web hosting.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  BedrockModelId:
+    Type: String
+    Description: Bedrock model id for the agents (never hardcoded; set per deployment).
+  OpensearchEndpoint:
+    Type: String
+    Description: OpenSearch domain endpoint (created manually or via console).
+  WebBucketName:
+    Type: String
+    Description: S3 bucket for the built web app (created by the CD workflow).
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for the API custom domain (optional).
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Custom domain for the API (optional; skip for staging).
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+    # container image functions: no Runtime here (image owns it)
+    Environment:
+      Variables:
+        ENV: !Ref Environment
+        LOG_LEVEL: INFO
+        BEDROCK_MODEL_ID: !Ref BedrockModelId
+        OPENSEARCH_ENDPOINT: !Ref OpensearchEndpoint
+        OPENSEARCH_INDEX: sources
+        DYNAMODB_TABLE_ESTIMATES: !Ref EstimatesTable
+        DYNAMODB_TABLE_FEEDS: !Ref FeedsTable
+        DYNAMODB_TABLE_SUBSCRIPTIONS: !Ref SubscriptionsTable
+        S3_BUCKET: !Ref ArtifactsBucket
+        SSM_PARAMETER_PREFIX: /dhuan
+        MODEL_VERSION: baseline-v1
+        H3_RESOLUTION: "8"
+        SMS_ENABLED: "0"
+        POWERTOOLS_SERVICE_NAME: dhuan-detective
+
+Resources:
+  # ---------------------------------------------------------------- tables --
+  EstimatesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub dhuan-estimates-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - {AttributeName: pk, AttributeType: S}
+        - {AttributeName: sk, AttributeType: S}
+      KeySchema:
+        - {AttributeName: pk, KeyType: HASH}
+        - {AttributeName: sk, KeyType: RANGE}
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  FeedsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub dhuan-feeds-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - {AttributeName: pk, AttributeType: S}
+      KeySchema:
+        - {AttributeName: pk, KeyType: HASH}
+
+  SubscriptionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub dhuan-subscriptions-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - {AttributeName: pk, AttributeType: S}
+        - {AttributeName: locality, AttributeType: S}
+      KeySchema:
+        - {AttributeName: pk, KeyType: HASH}
+      GlobalSecondaryIndexes:
+        - IndexName: locality-index
+          KeySchema:
+            - {AttributeName: locality, KeyType: HASH}
+          Projection:
+            ProjectionType: ALL
+
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub dhuan-artifacts-${Environment}-${AWS::AccountId}
+      LifecycleConfiguration:
+        Rules:
+          - Id: RawDataExpiry
+            Status: Enabled
+            ExpirationInDays: 90
+            Prefix: raw/
+
+  # ------------------------------------------------------------- web + CDN --
+  WebBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref WebBucketName
+
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${WebBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}
+
+  WebDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Comment: !Sub dhuan-detective-web-${Environment}
+        Origins:
+          - Id: web
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !Ref WebOAC
+          - Id: api
+            DomainName: !Sub ${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        DefaultCacheBehavior:
+          TargetOriginId: web
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: /v1/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5f1b7b0e4b
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            Compress: true
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+  WebOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub dhuan-web-oac-${Environment}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # ------------------------------------------------------------------- API --
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub dhuan-api-${Environment}
+      EndpointConfiguration:
+        Types: [REGIONAL]
+
+  ApiUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: !Sub dhuan-usage-plan-${Environment}
+      Throttle:
+        BurstLimit: 40
+        RateLimit: 20
+      Quota:
+        Limit: 20000
+        Period: DAY
+      ApiStages:
+        - ApiId: !Ref ApiGatewayRestApi
+          Stage: !Ref ApiStage
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: v1
+      RestApiId: !Ref ApiGatewayRestApi
+      DeploymentId: !Ref ApiDeployment
+      MethodSettings:
+        - ResourcePath: /v1/explain
+          HttpMethod: POST
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit: 2
+        - ResourcePath: /v1/estimate
+          HttpMethod: GET
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 10
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+
+  ApiGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+      PathPart: '{proxy+}'
+
+  ApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFunction.Arn}/invocations
+
+  ApiLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*
+
+  # ------------------------------------------------------------- functions --
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Dockerfile: Dockerfile
+      DockerContext: ../backend
+      DockerBuildArgs:
+        TARGET: lambda
+    Properties:
+      FunctionName: !Sub dhuan-api-${Environment}
+      PackageType: Image
+      MemorySize: 1024
+      Timeout: 30
+      Architectures: [arm64]
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref ApiErrorAlarm
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource:
+                - !GetAtt EstimatesTable.Arn
+                - !GetAtt FeedsTable.Arn
+                - !GetAtt SubscriptionsTable.Arn
+                - !Sub ${SubscriptionsTable.Arn}/index/locality-index
+            - Effect: Allow
+              Action: [s3:GetObject, s3:PutObject]
+              Resource: !Sub ${ArtifactsBucket.Arn}/*
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action: sns:Publish
+              Resource: !Ref AlertTopic
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SSM_PARAMETER_PREFIX}/*
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: '*'
+
+  PipelineFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Dockerfile: Dockerfile
+      DockerContext: ../backend
+      DockerBuildArgs:
+        TARGET: lambda
+    Properties:
+      FunctionName: !Sub dhuan-pipeline-${Environment}
+      PackageType: Image
+      MemorySize: 2048
+      Timeout: 900
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          CMD: pipeline
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EstimatesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FeedsTable
+        - Statement:
+            - Effect: Allow
+              Action: sns:Publish
+              Resource: !Ref AlertTopic
+
+  StateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub dhuan-pipeline-${Environment}
+      DefinitionUri: state-machine.asl.json
+      DefinitionSubstitutions:
+        PipelineFunctionName: !Ref PipelineFunction
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref PipelineFunction
+
+  PipelineSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub dhuan-hourly-${Environment}
+      ScheduleExpression: rate(1 hour)
+      State: ENABLED
+      Targets:
+        - Arn: !Ref StateMachine
+          Id: dhuan-hourly
+          RoleArn: !GetAtt PipelineEventsRole.Arn
+
+  SourceRefreshSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub dhuan-source-refresh-${Environment}
+      ScheduleExpression: rate(30 days)
+      State: ENABLED
+      Targets:
+        - Arn: !Ref PipelineFunction
+          Id: dhuan-source-refresh
+          Input: '{"task": "refresh_sources"}'
+          RoleArn: !GetAtt PipelineEventsRole.Arn
+
+  PipelineEventsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Ref StateMachine
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt PipelineFunction.Arn
+
+  # ----------------------------------------------------------------- SNS ---
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub dhuan-alerts-${Environment}
+      DisplayName: Dhuan Detective air-quality alerts
+
+  # ------------------------------------------------------------- DLQ + alarms
+  PipelineDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub dhuan-pipeline-dlq-${Environment}
+
+  PipelineDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub dhuan-pipeline-dlq-depth-${Environment}
+      AlarmDescription: DLQ depth grew; failed executions need inspection (see RUNBOOK)
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt PipelineDLQ.QueueName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  ApiErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub dhuan-api-errors-${Environment}
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ApiFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ApiUrl:
+    Description: API base URL (CloudFront domain)
+    Value: !Sub https://${WebDistribution.DomainName}
+
+  WebUrl:
+    Description: Web app URL
+    Value: !Sub https://${WebDistribution.DomainName}
+
+  StateMachineArn:
+    Value: !Ref StateMachine
+
+  AlertTopicArn:
+    Value: !Ref AlertTopic

@@ -1,0 +1,21 @@
+version = 0.1
+
+[default]
+[default.global]
+[default.global.parameters]
+
+[staging]
+[staging.global]
+[staging.global.parameters]
+stack_name = "dhuan-detective-staging"
+region = "ap-south-1"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+[prod]
+[prod.global]
+[prod.global.parameters]
+stack_name = "dhuan-detective-prod"
+region = "ap-south-1"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
