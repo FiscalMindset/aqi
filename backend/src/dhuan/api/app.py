@@ -59,6 +59,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         docs_url="/docs",
         openapi_url="/openapi.json",
+        # 3.0.x is what our committed spec and the tooling (Schemathesis,
+        # Redoc, codegen) validate against
+        openapi_version="3.0.3",
     )
     register_error_handlers(app)
     app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -67,6 +70,8 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
+        # the demo banner needs to read this header cross-origin
+        expose_headers=["X-Dhuan-Demo", "X-Correlation-Id"],
     )
     app.add_middleware(ObservabilityMiddleware)
 

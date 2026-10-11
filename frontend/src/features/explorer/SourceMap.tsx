@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Map as MlMap } from "maplibre-gl";
 import { useIdleCallback } from "../../lib/useIdleCallback";
 import type { SourceHit } from "../../lib/api";
@@ -27,16 +27,31 @@ export function SourceMap({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useIdleCallback(() => {
     void (async () => {
       if (!ref.current || mapRef.current) return;
+      try {
+        await _initMap(ref.current);
+      } catch (err) {
+        console.error("map init failed", err);
+        setFailed(true);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  });
+
+  async function _initMap(container: HTMLDivElement) {
+    {
+      if (mapRef.current) return;
       const maplibregl = (await import("maplibre-gl")).default;
       await import("maplibre-gl/dist/maplibre-gl.css");
-      if (!ref.current) return;
       const tiles = import.meta.env.VITE_LOCATION_MAPS_URL;
       const map = new maplibregl.Map({
-        container: ref.current,
+        container,
         style: {
           version: 8,
           sources: {
@@ -56,14 +71,23 @@ export function SourceMap({
       });
       map.addControl(new maplibregl.NavigationControl(), "top-right");
       map.on("click", (e) => onPick(e.lngLat.lat, e.lngLat.lng));
+      map.on("error", (e) => {
+        // tile fetch failures are visible, not silent
+        console.warn("map error", e.error?.message ?? "unknown");
+      });
       mapRef.current = map;
-    })();
-  });
+    }
+  }
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 12) });
+  }, [lat, lon]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
   }, [lat, lon]);
 
   useEffect(() => {
@@ -120,6 +144,33 @@ export function SourceMap({
   }, []);
 
   return (
-    <div ref={ref} data-testid="map" className="absolute inset-0" role="application" aria-label="Map" />
+    <div className="absolute inset-0">
+      <div
+        ref={ref}
+        data-testid="map"
+        className="absolute inset-0"
+        role="application"
+        aria-label="Map of Delhi-NCR with candidate pollution sources"
+      />
+      {loading && !failed && (
+        <div
+          className="absolute inset-0 grid place-items-center bg-night-900/80 text-slate-300 text-sm"
+          role="status"
+          data-testid="map-loading"
+        >
+          Loading map…
+        </div>
+      )}
+      {failed && (
+        <div
+          className="absolute inset-0 grid place-items-center bg-night-900/90 text-amber-300 text-sm p-4 text-center"
+          role="alert"
+          data-testid="map-error"
+        >
+          The map could not load (tiles blocked or offline). The estimate panel and
+          sources table remain available.
+        </div>
+      )}
+    </div>
   );
 }

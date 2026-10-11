@@ -15,7 +15,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
 
-from dhuan.api.errors import Problem, ProblemType, not_found_problem
+from dhuan.api.errors import (
+    Problem,
+    ProblemType,
+    not_found_problem,
+    upstream_problem,
+)
 from dhuan.api.schemas import SubscriptionRequest
 from dhuan.core.config import Settings, get_settings
 from dhuan.core.logging import get_logger
@@ -26,6 +31,20 @@ from dhuan.model.cpcb import CATEGORIES
 from dhuan.store.dynamodb import SubscriptionsStore
 
 logger = get_logger("api.subscriptions")
+
+
+def _store_unavailable(exc: Exception) -> Problem:
+    """Store failure becomes a typed 503, never an unhandled 500."""
+    logger.warning("subscription_store_unavailable: %s", exc)
+    from dhuan.core.metrics import record  # noqa: PLC0415
+
+    record("SubscriptionsStoreUnavailable", 1)
+    return upstream_problem(
+        "dynamodb",
+        "The subscription store is unavailable; try again shortly.",
+    )
+
+
 router = APIRouter(prefix="/v1", tags=["subscriptions"])
 
 
@@ -56,8 +75,11 @@ async def create_subscription(
         )
     token = uuid4().hex[:16]
     store = SubscriptionsStore(settings)
-    sub_id = store.make_id(body.email, body.locality)
-    existing = store.get(sub_id)
+    try:
+        sub_id = store.make_id(body.email, body.locality)
+        existing = store.get(sub_id)
+    except Exception as exc:
+        raise _store_unavailable(exc) from exc
     if existing is not None:
         record("SubscriptionIdempotentHit", 1)
         status = "already_subscribed" if existing.get("confirmed") else "pending_confirmation"
@@ -67,14 +89,17 @@ async def create_subscription(
             "locality": existing.get("locality"),
             "demo_mode": settings.demo_mode,
         }
-    store.create(
-        email=body.email,
-        locality=body.locality,
-        lat=body.lat,
-        lon=body.lon,
-        threshold_category=body.threshold_category,
-        pending_token=token,
-    )
+    try:
+        store.create(
+            email=body.email,
+            locality=body.locality,
+            lat=body.lat,
+            lon=body.lon,
+            threshold_category=body.threshold_category,
+            pending_token=token,
+        )
+    except Exception as exc:
+        raise _store_unavailable(exc) from exc
     _request_sns_confirmation(settings, body.email, body.locality, token)
     record("SubscriptionsCreated", 1)
     return {
@@ -99,7 +124,10 @@ async def confirm_subscription(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
     store = SubscriptionsStore(settings)
-    existing = store.get(id)
+    try:
+        existing = store.get(id)
+    except Exception as exc:
+        raise _store_unavailable(exc) from exc
     if existing is None:
         raise not_found_problem("Subscription")
     if existing.get("pending_token") != token:
@@ -123,10 +151,16 @@ async def delete_subscription(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
     store = SubscriptionsStore(settings)
-    existing = store.get(id)
+    try:
+        existing = store.get(id)
+    except Exception as exc:
+        raise _store_unavailable(exc) from exc
     if existing is None:
         raise not_found_problem("Subscription")
-    store.delete(id)
+    try:
+        store.delete(id)
+    except Exception as exc:
+        raise _store_unavailable(exc) from exc
     # unsubscribe the email from SNS so no further messages are attempted
     _sns_unsubscribe(settings, str(existing.get("email", "")))
     record("SubscriptionsDeleted", 1)

@@ -76,7 +76,14 @@ class Settings(BaseSettings):
     sms_enabled: bool = False
 
     # api surface
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+        ]
+    )
 
     # demo data (recorded fixtures, only used when DEMO_MODE=1)
     demo_data_dir: str = ""

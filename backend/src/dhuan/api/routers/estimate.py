@@ -53,6 +53,11 @@ async def estimate(
     lon: Annotated[float, Query(ge=-180, le=180)],
     settings: Settings = Depends(get_settings),
 ) -> EstimateOut:
+    return await compute_estimate(lat, lon, settings)
+
+
+async def compute_estimate(lat: float, lon: float, settings: Settings) -> EstimateOut:
+    """The estimate pipeline, callable from routes AND agent tools."""
     point = Point(lat=lat, lon=lon)
     if not point_in_ncr(point):
         raise outside_coverage_problem(lat, lon)

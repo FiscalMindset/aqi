@@ -21,8 +21,8 @@ from typing import Any
 from uuid import uuid4
 
 from dhuan.api.deps import get_fires, get_source_index
-from dhuan.api.routers.estimate import estimate as _estimate_route
 from dhuan.api.services import nearest_reading, stations_near, weather_now
+from dhuan.core.config import get_settings
 from dhuan.core.units import Point, haversine_km
 from dhuan.ingest.openaq import NotConfiguredError
 
@@ -52,6 +52,9 @@ class Evidence:
             "fetched_at": self.fetched_at,
             "ok": self.ok,
             "note": self.note,
+            # the raw tool payload travels with the evidence so synthesis and
+            # the UI can use the structured result, not just the summary
+            "result": self.result,
         }
 
 
@@ -209,7 +212,9 @@ def default_registry(
         }
 
     async def get_model_estimate(lat: float, lon: float) -> dict[str, Any]:
-        result = await _estimate_route(lat, lon)
+        from dhuan.api.routers.estimate import compute_estimate  # noqa: PLC0415
+
+        result = await compute_estimate(lat, lon, get_settings())
         return {
             "ok": True,
             "summary": (
