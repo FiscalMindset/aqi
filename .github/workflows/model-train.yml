@@ -27,7 +27,7 @@ jobs:
       - name: Model gates
         run: cd backend && uv run pytest tests/model -q
       - name: Open PR with metrics + card
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "feat(model): monthly retrain"
           title: "Monthly model retrain (auto)"
