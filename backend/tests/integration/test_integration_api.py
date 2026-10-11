@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 
 import pytest
@@ -160,3 +161,63 @@ def test_subscription_rejects_bad_threshold(api: TestClient) -> None:
         },
     )
     assert resp.status_code == 422
+
+
+def test_subscription_confirm_and_unsubscribe_flow(
+    dynamodb: object, api: TestClient, env: dict[str, str]
+) -> None:
+    """Create -> confirm with the stored token -> SNS unsubscribe on delete."""
+    import boto3
+
+    sns = boto3.client("sns", endpoint_url=env["AWS_ENDPOINT_URL"], region_name=env["AWS_REGION"])
+    topic = sns.create_topic(Name="test-dhuan-alerts-flow")["TopicArn"]
+    os.environ["SNS_TOPIC_ARN"] = topic
+    try:
+        from dhuan.core import config
+
+        config.get_settings.cache_clear()
+        from dhuan.store.dynamodb import SubscriptionsStore
+
+        payload = {
+            "email": "flow.parent@example.com",
+            "locality": "Rohini",
+            "lat": 28.7146,
+            "lon": 77.1025,
+            "threshold_category": "Very Poor",
+        }
+        created = api.post("/v1/subscriptions", json=payload)
+        assert created.status_code == 201
+        sub_id = created.json()["id"]
+
+        store = SubscriptionsStore()
+        item = store.get(sub_id)
+        assert item is not None and item["pending_token"]
+        # wrong token is rejected
+        bad = api.get("/v1/subscriptions/confirm", params={"id": sub_id, "token": "wrong"})
+        assert bad.status_code == 401
+        # correct token confirms
+        good = api.get(
+            "/v1/subscriptions/confirm",
+            params={"id": sub_id, "token": item["pending_token"]},
+        )
+        assert good.status_code == 200
+        assert good.json()["status"] == "confirmed"
+
+        store.delete(sub_id)
+    finally:
+        os.environ.pop("SNS_TOPIC_ARN", None)
+        from dhuan.core import config
+
+        config.get_settings.cache_clear()
+        sns.delete_topic(TopicArn=topic)
+
+
+def test_subscription_confirm_missing_is_404(api: TestClient) -> None:
+    resp = api.get("/v1/subscriptions/confirm", params={"id": "nope123", "token": "abcd"})
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("application/problem+json")
+
+
+def test_delete_missing_subscription_is_404(api: TestClient) -> None:
+    resp = api.delete("/v1/subscriptions/nope123")
+    assert resp.status_code == 404

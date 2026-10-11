@@ -17,6 +17,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
+from dhuan.api.deps import get_fires
 from dhuan.core.logging import get_logger
 from dhuan.core.metrics import record
 from dhuan.core.units import Point
@@ -54,25 +55,37 @@ def ingest_stations(_event: dict[str, Any]) -> dict[str, Any]:
 
 def ingest_weather(_event: dict[str, Any]) -> dict[str, Any]:
     """Hourly weather for the anchor points used by the grid predictor."""
-    client = WeatherClient()
+
+    async def _run() -> list[Any]:
+        client = WeatherClient()
+        try:
+            return list(await client.forecast(28.6139, 77.2090, days=1))
+        finally:
+            await client.aclose()
+
     try:
-        rows = asyncio.run(client.forecast(28.6139, 77.2090, days=1))
+        rows = asyncio.run(_run())
     except Exception:
         FeedsStore().record_failure("open-meteo", "unavailable")
         record("FeedWeatherFailed", 1)
         raise
-    finally:
-        asyncio.run(client.aclose())
     return _ok("open-meteo", len(rows))
+
+
+async def _recent_fires() -> list[Any]:
+    client = get_fires()
+    try:
+        return list(await client.recent_in_ncr(day_range=1))
+    finally:
+        await client.aclose()
 
 
 def ingest_fires(_event: dict[str, Any]) -> dict[str, Any]:
     """NASA FIRMS detections over the NCR bbox (may legitimately be zero)."""
-    from dhuan.api.deps import get_fires
     from dhuan.ingest.openaq import NotConfiguredError
 
     try:
-        fires = asyncio.run(get_fires().recent_in_ncr(day_range=1))
+        fires = asyncio.run(_recent_fires())
     except NotConfiguredError:
         FeedsStore().record_failure("firms", "MAP_KEY not configured")
         record("FeedFiresMissingConfig", 1)
@@ -125,9 +138,15 @@ def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
         return {"predictions": [], "ok": False, "reason": "model not trained"}
 
     # weather at the current hour for the anchor point (needed for features)
-    client = WeatherClient()
-    hours = asyncio.run(client.forecast(28.6139, 77.2090, days=1))
-    asyncio.run(client.aclose())
+
+    async def _weather() -> list[Any]:
+        client = WeatherClient()
+        try:
+            return list(await client.forecast(28.6139, 77.2090, days=1))
+        finally:
+            await client.aclose()
+
+    hours = asyncio.run(_weather())
     now_key = now.strftime("%Y-%m-%dT%H:00")
     wx = next(
         (

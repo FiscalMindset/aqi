@@ -29,6 +29,9 @@ def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     }.items():
         monkeypatch.setenv(key, value)
     config.get_settings.cache_clear()
+    from dhuan.api.deps import reset_clients
+
+    reset_clients()  # drop any clients cached with different settings
     return TestClient(create_app())
 
 

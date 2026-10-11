@@ -187,15 +187,25 @@ class UpstreamClient:
         self.policy = HttpPolicy.from_settings(self.settings)
         self.client = make_client(self.policy)
 
-    async def get(self, url: str, **kwargs: Any) -> httpx.Response:
-        if "timeout" not in kwargs:
-            kwargs["timeout"] = self.policy.timeout_seconds
-        return await make_request(self.client, self.policy, self.source, "GET", url, **kwargs)
+    def _url(self, path: str) -> str:
+        """Accept either a full URL or a path relative to the base_url."""
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        return self.base_url.rstrip("/") + "/" + path.lstrip("/")
 
-    async def post(self, url: str, **kwargs: Any) -> httpx.Response:
+    async def get(self, path: str, **kwargs: Any) -> httpx.Response:
         if "timeout" not in kwargs:
             kwargs["timeout"] = self.policy.timeout_seconds
-        return await make_request(self.client, self.policy, self.source, "POST", url, **kwargs)
+        return await make_request(
+            self.client, self.policy, self.source, "GET", self._url(path), **kwargs
+        )
+
+    async def post(self, path: str, **kwargs: Any) -> httpx.Response:
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = self.policy.timeout_seconds
+        return await make_request(
+            self.client, self.policy, self.source, "POST", self._url(path), **kwargs
+        )
 
     async def aclose(self) -> None:
         await self.client.aclose()

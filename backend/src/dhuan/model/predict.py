@@ -90,7 +90,7 @@ def nearest_station_fallback(lag1_value: float) -> Prediction:
     )
 
 
-DELHI_SOURCES_PATH = Path(__file__).resolve().parents[2] / "data" / "delhi_sources.json"
+DELHI_SOURCES_PATH = Path(__file__).resolve().parents[3] / "data" / "delhi_sources.json"
 
 
 def build_features_for_point(

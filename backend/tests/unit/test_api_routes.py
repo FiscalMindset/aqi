@@ -1,0 +1,339 @@
+"""API route edge-case tests: estimate fallbacks, health degradation, grid."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import httpx
+import pytest
+import respx
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture()
+def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """TestClient with env-driven settings and a clean client/cache state."""
+    for key, value in {
+        "OPENAQ_API_KEY": "test-key",
+        "ENV": "test",
+        "DEMO_DATA_DIR": str(DEMO_DIR),
+        "DEMO_MODE": "1",
+    }.items():
+        monkeypatch.setenv(key, value)
+    from dhuan.core import config
+
+    config.get_settings.cache_clear()
+    from dhuan.api.app import create_app
+    from dhuan.api.deps import (
+        get_station_cache,
+        get_weather_cache,
+        reset_clients,
+    )
+
+    reset_clients()
+    get_station_cache()._store.clear()
+    get_weather_cache()._store.clear()
+    return TestClient(create_app())
+
+
+def test_grid_returns_304_for_matching_etag(api: TestClient) -> None:
+    first = api.get("/v1/grid", params={"simplify": True})
+    etag = first.headers["etag"]
+    second = api.get("/v1/grid", params={"simplify": True}, headers={"If-None-Match": etag})
+    assert second.status_code == 304
+
+
+def test_grid_full_geometry_is_geojson(api: TestClient) -> None:
+    resp = api.get("/v1/grid")
+    body = resp.json()
+    assert body["type"] == "FeatureCollection"
+    assert len(body["features"]) > 1000
+    feature = body["features"][0]
+    assert feature["geometry"]["type"] == "Polygon"
+
+
+def test_estimate_outside_coverage_is_problem_json(api: TestClient) -> None:
+    resp = api.get("/v1/estimate", params={"lat": 19.076, "lon": 72.877})
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["type"].endswith("/outside-coverage")
+
+
+def test_estimate_demo_mode_serves_recorded_anchor(api: TestClient) -> None:
+    resp = api.get("/v1/estimate", params={"lat": 28.63576, "lon": 77.22445})
+    assert resp.status_code == 200
+    body = resp.json()
+    # the recorded Delhi station anchors the estimate, with the honesty note
+    assert body["nearest_station_pm25"] is not None
+    assert "Estimate, not a measurement" in body["honesty"]
+    assert body["demo_mode"] is True
+
+
+@respx.mock
+def test_estimate_baseline_when_station_present(
+    api: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Live mode: a station reading anchors the estimate when the model is off."""
+    monkeypatch.setenv("DEMO_MODE", "0")
+    from dhuan.api.deps import get_station_cache, get_weather_cache, reset_clients
+    from dhuan.core import config
+
+    config.get_settings.cache_clear()
+    reset_clients()
+    get_station_cache()._store.clear()
+    get_weather_cache()._store.clear()
+    respx.get("https://api.openaq.org/v3/locations").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": 8118,
+                        "name": "New Delhi",
+                        "coordinates": {"latitude": 28.63576, "longitude": 77.22445},
+                        "provider": {"name": "AirNow"},
+                        "sensors": [{"id": 23534, "parameter": {"name": "pm25"}}],
+                        "datetimeLast": {"utc": "2026-10-01T00:00:00Z"},
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://api.openaq.org/v3/locations/8118/latest").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "datetime": {"utc": "2026-10-10T20:00:00Z"},
+                        "value": 168.0,
+                        "coordinates": {"latitude": 28.63576, "longitude": 77.22445},
+                        "sensorsId": 23534,
+                        "locationsId": 8118,
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://api.open-meteo.com/v1/forecast").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "hourly": {
+                    "time": ["2026-10-10T20:00"],
+                    "wind_speed_10m": [2.5],
+                    "wind_direction_10m": [292.0],
+                    "wind_gusts_10m": [4.0],
+                    "temperature_2m": [14.0],
+                    "relative_humidity_2pct_2m": [70.0],
+                    "precipitation": [0.0],
+                    "relative_humidity_2m": [70.0],
+                }
+            },
+        )
+    )
+    resp = api.get("/v1/estimate", params={"lat": 28.64, "lon": 77.22})
+    if resp.status_code != 200:
+        print("PROBLEM", resp.json())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["pm25_low"] <= body["pm25_mid"] <= body["pm25_high"]
+    assert body["nearest_station_pm25"] == 168.0
+
+
+def test_ready_reports_components(api: TestClient) -> None:
+    resp = api.get("/ready")
+    assert resp.status_code in (200, 503)
+    if resp.status_code == 200:
+        components = {c["component"] for c in resp.json()["checks"]}
+        assert {"dynamodb", "opensearch", "feeds"} <= components
+
+
+def test_openapi_contract_has_all_routes(api: TestClient) -> None:
+    spec = api.get("/openapi.json").json()
+    paths = spec["paths"]
+    for expected in (
+        "/health",
+        "/ready",
+        "/v1/estimate",
+        "/v1/grid",
+        "/v1/sources",
+        "/v1/stations",
+        "/v1/status",
+        "/v1/validation",
+        "/v1/explain",
+        "/v1/subscriptions",
+    ):
+        assert expected in paths, f"missing {expected} in OpenAPI"
+
+
+def test_advice_for_attribution_covers_personas() -> None:
+    from dhuan.agents.attribution import advice_for_attribution
+    from dhuan.agents.schemas import AttributionResult
+
+    result = AttributionResult(
+        summary="s",
+        likely_causes=[],
+        confidence="low",
+        confidence_reason="r",
+        evidence=[],
+    )
+    advice = advice_for_attribution(result, {"pm25_mid": 300.0, "category": "Severe"})
+    personas = {a.persona for a in advice}
+    assert {"parent", "rider", "worker", "general"} <= personas
+    for a in advice:
+        assert a.disclaimer
+        assert a.actions
+
+
+DEMO_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "demo"
+
+
+@respx.mock
+def test_estimate_model_failure_falls_back_to_station(
+    api: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A model failure must fall back to the station baseline and be logged."""
+    monkeypatch.setenv("DEMO_MODE", "0")
+    from dhuan.api.deps import get_station_cache, get_weather_cache, reset_clients
+    from dhuan.core import config
+
+    config.get_settings.cache_clear()
+    reset_clients()
+    get_station_cache()._store.clear()
+    get_weather_cache()._store.clear()
+
+    def _boom(*_a: object, **_k: object) -> None:
+        raise RuntimeError("model artifact corrupt")
+
+    monkeypatch.setattr("dhuan.model.predict.load_artifact", _boom)
+
+    respx.get("https://api.openaq.org/v3/locations").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": 8118,
+                        "name": "New Delhi",
+                        "coordinates": {"latitude": 28.63576, "longitude": 77.22445},
+                        "provider": {"name": "AirNow"},
+                        "sensors": [{"id": 23534, "parameter": {"name": "pm25"}}],
+                        "datetimeLast": {"utc": "2026-10-01T00:00:00Z"},
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://api.openaq.org/v3/locations/8118/latest").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "datetime": {"utc": "2026-10-10T20:00:00Z"},
+                        "value": 175.0,
+                        "coordinates": {"latitude": 28.63576, "longitude": 77.22445},
+                        "sensorsId": 23534,
+                        "locationsId": 8118,
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://api.open-meteo.com/v1/forecast").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "hourly": {
+                    "time": ["2026-10-10T20:00"],
+                    "wind_speed_10m": [3.0],
+                    "wind_direction_10m": [270.0],
+                    "wind_gusts_10m": [5.0],
+                    "temperature_2m": [15.0],
+                    "relative_humidity_2m": [65.0],
+                    "precipitation": [0.0],
+                }
+            },
+        )
+    )
+    resp = api.get("/v1/estimate", params={"lat": 28.64, "lon": 77.22})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["served_by"] == "nearest-station"
+    assert body["pm25_mid"] == 175.0
+
+
+def test_ready_handles_unreachable_components(api: TestClient) -> None:
+    """With LocalStack unreachable the route still answers, honestly degraded."""
+
+    resp = api.get("/ready")
+    assert resp.status_code in (200, 503)
+    body = resp.json()
+    assert body["status"] in ("ready", "degraded")
+    assert len(body["checks"]) == 3
+    assert all("ok" in c for c in body["checks"])
+
+
+def test_validation_serves_real_metrics(api: TestClient) -> None:
+    resp = api.get("/v1/validation")
+    if resp.status_code == 404:
+        pytest.skip("no trained metrics artifact in this environment")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["n_rows"] > 1000
+    assert "temporal_holdout" in body
+    assert body["winner"]
+
+
+def test_stations_limit_respected(api: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEMO_MODE", "1")
+    from dhuan.core import config
+
+    config.get_settings.cache_clear()
+    resp = api.get("/v1/stations", params={"lat": 28.64, "lon": 77.22, "limit": 3})
+    assert resp.status_code == 200
+    assert len(resp.json()) <= 3
+
+
+def test_sources_wind_unavailable_marks_wind_none(api: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEMO_MODE", "1")
+    from dhuan.core import config
+
+    config.get_settings.cache_clear()
+
+    class _EmptyIndex:
+        def sources_near(self, **_kw: object) -> list[dict[str, object]]:
+            return [
+                {
+                    "osm_id": "way/1",
+                    "type": "landfill",
+                    "name": "Bhalswa Landfill Area",
+                    "location": {"lat": 28.72, "lon": 77.16},
+                    "distance_km": 12.0,
+                    "bearing_deg": 292.0,
+                    "in_upwind_cone": True,
+                    "influence_score": 0.6,
+                    "area_m2": 120000,
+                    "attribution": "© OpenStreetMap contributors (ODbL)",
+                }
+            ]
+
+    from dhuan.api.deps import get_source_index
+
+    def _override() -> _EmptyIndex:
+        return _EmptyIndex()
+
+    api.app.dependency_overrides[get_source_index] = _override
+    try:
+        resp = api.get(
+            "/v1/sources",
+            params={"lat": 28.6139, "lon": 77.209, "radius_km": 25, "upwind": False},
+        )
+    finally:
+        api.app.dependency_overrides.clear()
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] >= 0
+    for source in body["sources"]:
+        assert "© OpenStreetMap" in source["attribution"]

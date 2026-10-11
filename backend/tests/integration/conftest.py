@@ -42,6 +42,9 @@ def env() -> Iterator[dict[str, str]]:
             "AWS_ENDPOINT_URL": "http://localhost:4567",
             "AWS_CONFIG_FILE": config_file,
             "AWS_SHARED_CREDENTIALS_FILE": creds_file,
+            # isolate from any real ~/.aws state on the developer machine: a
+            # cached SSO/login token must never leak into tests
+            "HOME": tmpdir,
             "OPENSEARCH_ENDPOINT": "http://localhost:9201",
             "OPENSEARCH_INDEX": "sources",
             "DYNAMODB_TABLE_ESTIMATES": "test-dhuan-estimates",
@@ -53,10 +56,20 @@ def env() -> Iterator[dict[str, str]]:
         }
         for k, v in settings.items():
             os.environ[k] = v
+        # drop any default session whose credentials were resolved before HOME
+        # was isolated (boto3 caches the default session process-wide)
+        import boto3
+
         from dhuan.core import config
 
+        boto3.DEFAULT_SESSION = None
         config.get_settings.cache_clear()
+        from dhuan.api.deps import reset_clients
+
+        reset_clients()  # unit tests may have cached clients on other endpoints
         yield settings
+        boto3.DEFAULT_SESSION = None
+        reset_clients()
         config.get_settings.cache_clear()
 
 
@@ -139,6 +152,7 @@ def source_index(env: dict[str, str]) -> Iterator[Any]:
     from dhuan.store.opensearch import SourceIndex
 
     index = SourceIndex()
+    index.es.indices.delete(index=index.index, ignore_unavailable=True)
     index.ensure_index()
     payload = json.loads((FIXTURES / "overpass_sample.json").read_text())
     from dhuan.ingest.osm import parse_overpass

@@ -86,9 +86,9 @@ class BedrockBackend:
             "tools": [
                 {
                     "toolSpec": {
-                        "name": t["name"],
-                        "description": t["description"],
-                        "inputSchema": {"json": t["parameters"]},
+                        "name": t.get("name", ""),
+                        "description": t.get("description", ""),
+                        "inputSchema": {"json": t.get("parameters", {"type": "object"})},
                     }
                 }
                 for t in tools
@@ -406,8 +406,12 @@ def _parse_model_output(text: str, evidence: list[dict[str, Any]]) -> Attributio
         data = json.loads(text[start : end + 1])
     except ValueError:
         return synthesize_attribution(evidence=evidence, registry_ids=valid_ids)
-    for cause in data.get("likely_causes", []):
-        cause["evidence_ids"] = [i for i in cause.get("evidence_ids", []) if i in valid_ids]
+    # A claim without a valid same-run evidence id must never ship (rule 4).
+    data["likely_causes"] = [
+        cause
+        for cause in data.get("likely_causes", [])
+        if [i for i in cause.get("evidence_ids", []) if i in valid_ids]
+    ]
     data["evidence"] = evidence
     data.setdefault("tool_calls", [])
     result = AttributionResult.model_validate(data)

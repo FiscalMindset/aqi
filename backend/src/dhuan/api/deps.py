@@ -70,3 +70,8 @@ async def aclose_clients() -> None:
     index = _clients.pop("sources", None)
     if index is not None:
         index.close()
+
+
+def reset_clients() -> None:
+    """Drop cached clients so changed settings take effect (used by tests)."""
+    _clients.clear()
