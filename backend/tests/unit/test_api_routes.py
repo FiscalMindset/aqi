@@ -33,19 +33,11 @@ def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def test_grid_returns_304_for_matching_etag(api: TestClient) -> None:
-    first = api.get("/v1/grid", params={"simplify": True})
+    first = api.get("/v1/grid")
     etag = first.headers["etag"]
-    second = api.get("/v1/grid", params={"simplify": True}, headers={"If-None-Match": etag})
+    second = api.get("/v1/grid", headers={"If-None-Match": etag})
     assert second.status_code == 304
 
-
-def test_grid_full_geometry_is_geojson(api: TestClient) -> None:
-    resp = api.get("/v1/grid")
-    body = resp.json()
-    assert body["type"] == "FeatureCollection"
-    assert len(body["features"]) > 1000
-    feature = body["features"][0]
-    assert feature["geometry"]["type"] == "Polygon"
 
 
 def test_estimate_outside_coverage_is_problem_json(api: TestClient) -> None:

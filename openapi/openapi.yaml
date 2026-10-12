@@ -332,25 +332,25 @@
         "tags": [
           "grid"
         ],
-        "summary": "Latest H3 res-8 grid for Delhi-NCR as GeoJSON",
+        "summary": "H3 res-8 grid cell ids for Delhi-NCR as GeoJSON",
         "operationId": "grid_v1_grid_get",
         "parameters": [
           {
-            "name": "simplify",
+            "name": "include_geometry",
             "in": "query",
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Omit per-cell polylines (ids only)",
+              "description": "Include polygon boundaries (refused: exceeds the 10 MB limit)",
               "default": false,
-              "title": "Simplify"
+              "title": "Include Geometry"
             },
-            "description": "Omit per-cell polylines (ids only)"
+            "description": "Include polygon boundaries (refused: exceeds the 10 MB limit)"
           }
         ],
         "responses": {
           "200": {
-            "description": "GeoJSON FeatureCollection of grid cells (ETag cached).",
+            "description": "GeoJSON FeatureCollection of grid cells (ETag cached). Cell ids by default; per-cell polygon geometry is refused because it exceeds the API Gateway 10 MB response limit.",
             "content": {
               "application/json": {
                 "schema": {}
