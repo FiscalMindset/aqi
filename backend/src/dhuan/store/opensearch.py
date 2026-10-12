@@ -15,6 +15,9 @@ sorted by distance. This keeps the query index-friendly and the math honest.
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from opensearchpy import OpenSearch, exceptions
@@ -25,6 +28,12 @@ from dhuan.core.units import Point
 from dhuan.geo.scoring import CandidateSource, Influence, influence_score
 
 logger = get_logger("store.opensearch")
+
+# The classified OSM catalogue that ships with the image, built from a real
+# Overpass extract. It lets attribution work with no OpenSearch running, which
+# is the difference between "the app explains the air" and "the app returns 503".
+LOCAL_CATALOGUE = Path(__file__).resolve().parents[3] / "data" / "delhi_sources.json"
+LOCAL_CATALOGUE_ENV = "DHUAN_SOURCE_CATALOGUE"
 
 INDEX_MAPPINGS: dict[str, Any] = {
     "mappings": {
@@ -40,6 +49,27 @@ INDEX_MAPPINGS: dict[str, Any] = {
         }
     }
 }
+
+
+@lru_cache(maxsize=1)
+def local_catalogue() -> tuple[dict[str, Any], ...]:
+    """The shipped OSM source catalogue, loaded once.
+
+    Empty when the file is absent; the caller then falls back to OpenSearch.
+    """
+    import os  # noqa: PLC0415
+
+    override = os.environ.get(LOCAL_CATALOGUE_ENV)
+    path = Path(override) if override else LOCAL_CATALOGUE
+    if not path.exists():
+        return ()
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        logger.warning("local_catalogue_unreadable: %s", exc)
+        return ()
+    rows = payload.get("sources", [])
+    return tuple(r for r in rows if isinstance(r, dict) and "lat" in r and "lon" in r)
 
 
 def client(settings: Settings | None = None) -> OpenSearch:
@@ -109,7 +139,23 @@ class SourceIndex:
         wind_from_deg: float | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """Geo-distance query, then exact cone filtering and influence scoring."""
+        """Geo-distance query, then exact cone filtering and influence scoring.
+
+        Uses the shipped OSM catalogue when one is available, so this works with
+        no OpenSearch. OpenSearch is preferred when it is reachable because it
+        carries the live index; the local catalogue is the fallback, and both
+        paths apply the identical cone test and influence score.
+        """
+        local = _local_sources_near(
+            lat=lat,
+            lon=lon,
+            radius_km=radius_km,
+            upwind=upwind,
+            wind_from_deg=wind_from_deg,
+            limit=limit,
+        )
+        if local:
+            return local
         query: dict[str, Any] = {
             "size": max(limit * 4, 200),
             "query": {
@@ -173,3 +219,58 @@ class SourceIndex:
 
 
 __all__ = ["INDEX_MAPPINGS", "SourceIndex", "client"]
+
+
+def _local_sources_near(
+    *,
+    lat: float,
+    lon: float,
+    radius_km: float,
+    upwind: bool,
+    wind_from_deg: float | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Same maths as the OpenSearch path, over the shipped OSM catalogue."""
+    rows = local_catalogue()
+    if not rows:
+        return []
+    target = Point(lat=lat, lon=lon)
+    out: list[tuple[float, dict[str, Any]]] = []
+    for row in rows:
+        try:
+            candidate = CandidateSource(
+                osm_id=str(row.get("osm_id") or f"static-{row['lat']:.5f},{row['lon']:.5f}"),
+                name=str(row.get("name") or ""),
+                source_type=str(row.get("kind") or row.get("type") or "other"),
+                location=Point(lat=float(row["lat"]), lon=float(row["lon"])),
+                area_m2=row.get("area_m2"),
+                tags=dict(row.get("tags") or row.get("source_tags") or {}),
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        influence = influence_score(candidate, target, wind_from_deg or 0.0)
+        if influence.distance_km > radius_km:
+            continue
+        if upwind and wind_from_deg is not None and not influence.in_cone:
+            continue
+        if not upwind:
+            influence = influence_score(candidate, target, influence.bearing_deg)
+        out.append(
+            (
+                influence.score,
+                {
+                    "osm_id": candidate.osm_id,
+                    "name": candidate.name,
+                    "type": candidate.source_type,
+                    "location": {"lat": candidate.location.lat, "lon": candidate.location.lon},
+                    "area_m2": candidate.area_m2,
+                    "distance_km": round(influence.distance_km, 2),
+                    "bearing_deg": round(influence.bearing_deg, 1),
+                    "in_upwind_cone": influence.in_cone,
+                    "influence_score": influence.score,
+                    "attribution": "© OpenStreetMap contributors (ODbL)",
+                },
+            )
+        )
+    out.sort(key=lambda pair: pair[0], reverse=True)
+    return [doc for _, doc in out[:limit]]
