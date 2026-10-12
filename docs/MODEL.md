@@ -10,7 +10,7 @@ Hourly PM2.5 (µg/m³) at any point in Delhi-NCR, with an 80% interval.
 
 | Source | What | Auth | Verified |
 |---|---|---|---|
-| OpenAQ public S3 archive | 22,106 hourly station rows across Delhi, Chennai, Hyderabad | none | archive buckets fetched live during the build |
+| OpenAQ public S3 archive | **591,372 hourly pm25 rows across 73 Delhi-NCR stations** (DPCC, CPCB, IMD, UPPCB, HSPCB), 2026-06-14..2026-10-12 | none | `scripts/fetch_recent_training_data.py`, committed gzipped (131 MB raw exceeds GitHub's 100 MB limit) |
 | Open-Meteo archive API | 20,544 hourly weather rows at the same stations | none | HTTP 200, schema checked |
 | OpenStreetMap (Overpass) | 2,329 real Delhi source geometries (landfills, industry, construction, junctions) | none | fetched live, mirrors documented |
 
