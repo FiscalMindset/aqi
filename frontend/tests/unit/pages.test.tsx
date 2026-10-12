@@ -68,7 +68,6 @@ describe("StatusPage", () => {
         },
       ],
       coverage: {},
-      demo_mode: false,
     });
     wrap(<StatusPage />);
     await waitFor(() => expect(screen.getByTestId("overall")).toBeDefined());
@@ -83,6 +82,26 @@ describe("HowItWorks", () => {
       lat: 28.6139,
       lon: 77.209,
       served_by: "scripted-deterministic",
+    prose_served_by: "composed-grounded",
+    headline: "Estimated 200 µg/m³ here — Very Poor band.",
+    explanation: "We estimate 200 µg/m³ at this point.",
+    paragraphs: [{ intent: "what we estimate here", text: "We estimate 200 µg/m³.", passage_ids: ["model-estimate"] }],
+    passages: [
+      {
+        passage_id: "model-estimate",
+        kind: "model_estimate",
+        text: "Our estimate is 200 ug/m3",
+        authority: 0.86,
+        measured: false,
+        observed_at: null,
+        age_seconds: null,
+        source_url: null,
+        evidence_id: null,
+        facts: {},
+      },
+    ],
+    retrieval_trace: [],
+    evidence_gaps: [],
       attribution: {
         summary: "",
         likely_causes: [],
@@ -99,10 +118,8 @@ describe("HowItWorks", () => {
           },
         ],
         tool_calls: [],
-        demo_mode: false,
       },
       advice: [],
-      demo_mode: false,
       note: "",
     });
     wrap(<HowItWorks />);

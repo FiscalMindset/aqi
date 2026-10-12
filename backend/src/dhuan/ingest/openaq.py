@@ -10,7 +10,8 @@ Verified against https://docs.openaq.org (2026-10-15):
 
 Without an API key the client refuses to fabricate data: it raises
 `NotConfiguredError`, which the API surfaces as an unavailable feed in
-`/v1/status` (honesty rule). DEMO_MODE serving is handled above this layer.
+`/v1/status` (honesty rule). With no key the caller falls back to the
+credential-free public archive in `ingest/archive.py`.
 """
 
 from __future__ import annotations

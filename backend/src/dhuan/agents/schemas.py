@@ -48,7 +48,6 @@ class AttributionResult(BaseModel):
     confidence_reason: str
     evidence: list[EvidenceItem]
     tool_calls: list[str] = Field(default_factory=list)
-    demo_mode: bool = False
 
 
 class PersonaAdvice(BaseModel):
@@ -75,4 +74,3 @@ class ExplainResponse(BaseModel):
     estimate: dict[str, object]
     attribution: AttributionResult
     advice: list[PersonaAdvice]
-    demo_mode: bool

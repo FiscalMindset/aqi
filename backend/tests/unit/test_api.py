@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import httpx
 import pytest
@@ -15,7 +14,6 @@ from dhuan.core import config
 
 OPENAQ_LOCATIONS_URL = "https://api.openaq.org/v3/locations"
 OPENAQ_LATEST_URL = "https://api.openaq.org/v3/locations/8118/latest"
-DEMO_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "demo"
 
 
 @pytest.fixture()
@@ -24,8 +22,6 @@ def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     for key, value in {
         "OPENAQ_API_KEY": "test-key",
         "ENV": "test",
-        "DEMO_DATA_DIR": str(DEMO_DIR),
-        "DEMO_MODE": "0",
     }.items():
         monkeypatch.setenv(key, value)
     config.get_settings.cache_clear()
@@ -119,18 +115,6 @@ def test_stations_serves_openaq_readings(api: TestClient) -> None:
     assert body[0]["age_seconds"] > 0
 
 
-def test_stations_demo_mode_serves_recorded_data_with_flag(
-    api: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("DEMO_MODE", "1")
-    config.get_settings.cache_clear()
-    resp = api.get("/v1/stations", params={"lat": 28.65, "lon": 77.22})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body) >= 1
-    # recorded data is real historical data: Jan 2024, so its age is large and honest
-    assert body[0]["age_seconds"] > 0
-
 
 def test_unhandled_route_404_is_problem(api: TestClient) -> None:
     resp = api.get("/v1/does-not-exist")
@@ -185,14 +169,3 @@ def test_explain_runs_deterministic_agent(
         assert a["disclaimer"]
 
 
-def test_estimate_endpoint_demo_mode(api: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    from dhuan.core import config
-
-    monkeypatch.setenv("DEMO_MODE", "1")
-    config.get_settings.cache_clear()
-    resp = api.get("/v1/estimate", params={"lat": 28.6139, "lon": 77.2090})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["pm25_low"] <= body["pm25_mid"] <= body["pm25_high"]
-    assert body["honesty"].startswith("Estimate, not a measurement")
-    assert body["demo_mode"] is True

@@ -19,28 +19,6 @@ function wrap(ui: React.ReactNode) {
 
 beforeEach(() => vi.restoreAllMocks());
 
-const estimate = {
-  lat: 28.65,
-  lon: 77.2,
-  ts_utc: "2026-10-10T12:00:00Z",
-  pm25_low: 120,
-  pm25_mid: 160,
-  pm25_high: 200,
-  category: "Very Poor",
-  nearest_station_pm25: 168,
-  nearest_station_name: "New Delhi",
-  data_age_seconds: 600,
-  stale: false,
-  model_version: "pkl:abc",
-  served_by: "model",
-  cpcb_table_version: "2014-11",
-  honesty: "Estimate, not a measurement.",
-  demo_mode: false,
-  persistence_anchor_ugm3: 226,
-  model_adjustment_ugm3: -2.6,
-  method: "persistence baseline",
-  features_used: [],
-};
 
 describe("Subscribe", () => {
   it("submits and reports the confirmation flow", async () => {
@@ -78,10 +56,60 @@ describe("Subscribe", () => {
 });
 
 describe("RoutesCompare", () => {
-  it("renders both route cards with the midpoint estimate", async () => {
-    vi.spyOn(apiLib.api, "estimate").mockResolvedValue(estimate);
+  it("ranks the cleaner longer route first, on exposure rather than distance", async () => {
+    vi.spyOn(apiLib.api, "compareRoutes").mockResolvedValue({
+      origin: { lat: 28.6139, lon: 77.209 },
+      destination: { lat: 28.7146, lon: 77.1025 },
+      router: "project-osrm",
+      corridor_count: 2,
+      cleanest:       {
+        rank: 1,
+        kind: "road",
+        distance_km: 9.0,
+        duration_min: 10,
+        mean_pm25: 70,
+        peak_pm25: 90,
+        peak_at: { lat: 28.6139, lon: 77.209 },
+        dose_index: 630,
+        served_points: 2,
+        geometry: [
+          [77.209, 28.6139],
+          [77.16, 28.6],
+          [77.1025, 28.7146],
+        ],
+        samples: [
+          { lat: 28.6139, lon: 77.209, pm25_mid: 90, pm25_low: 80, pm25_high: 100 },
+          { lat: 28.7146, lon: 77.1025, pm25_mid: 85, pm25_low: 75, pm25_high: 95 },
+        ],
+      },
+      worst: {
+        rank: 2,
+        kind: "road",
+        distance_km: 14.0,
+        duration_min: 15,
+        mean_pm25: 120,
+        peak_pm25: 210,
+        peak_at: { lat: 28.6139, lon: 77.209 },
+        dose_index: 1080,
+        served_points: 2,
+        geometry: [
+          [77.209, 28.6139],
+          [77.1025, 28.7146],
+        ],
+        samples: [
+          { lat: 28.6139, lon: 77.209, pm25_mid: 210, pm25_low: 190, pm25_high: 230 },
+          { lat: 28.7146, lon: 77.1025, pm25_mid: 180, pm25_low: 160, pm25_high: 200 },
+        ],
+      },
+      mean_pm25_saving: 50,
+      samples_per_corridor: 2,
+    } as never);
+
     wrap(<RoutesCompare />);
-    await waitFor(() => expect(screen.getByTestId("route-direct")).toBeDefined());
-    expect(screen.getByTestId("route-alt")).toBeDefined();
+    await waitFor(() => expect(screen.getByTestId("corridor-1")).toBeDefined());
+    expect(screen.getByTestId("corridor-2")).toBeDefined();
+    // the cleanest corridor is the longer, 14 km one: ranking is by exposure
+    const summary = screen.getByTestId("routes-summary").textContent ?? "";
+    expect(summary).toContain("50");
   });
 });

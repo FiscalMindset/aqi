@@ -73,7 +73,6 @@ async def status(settings: Settings = Depends(get_settings)) -> StatusOut:
             "boundary_fetched": prov.get("fetched_utc", "unknown"),
             "boundary_license": prov.get("license", "unknown"),
         },
-        demo_mode=settings.demo_mode,
     )
 
 

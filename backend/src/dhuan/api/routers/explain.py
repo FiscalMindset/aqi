@@ -51,7 +51,6 @@ async def explain_route(
         "retrieval_trace": grounded["retrieval_trace"],
         "evidence_gaps": bundle.gaps,
         "advice": [a.model_dump() for a in bundle.advice],
-        "demo_mode": settings.demo_mode,
         "note": (
             "The explanation is composed from retrieved evidence, not generated "
             "freely: each paragraph lists the passages it came from. Claims are "

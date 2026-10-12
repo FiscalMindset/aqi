@@ -5,7 +5,6 @@ import i18n from "../../src/i18n";
 import { BottomSheet } from "../../src/components/BottomSheet";
 import { ErrorBoundary } from "../../src/components/ErrorBoundary";
 import { OfflineBanner } from "../../src/components/OfflineBanner";
-import { DemoBanner } from "../../src/components/DemoBanner";
 import { Loading } from "../../src/components/Loading";
 import { SkipLink } from "../../src/components/SkipLink";
 
@@ -90,21 +89,6 @@ describe("OfflineBanner", () => {
   });
 });
 
-describe("DemoBanner", () => {
-  it("renders only when the document is marked demo", () => {
-    const { queryByTestId, rerender } = wrap(<DemoBanner />);
-    expect(queryByTestId("demo-banner")).toBeNull();
-    document.documentElement.dataset.demo = "1";
-    rerender(<DemoBanner />);
-    // MutationObserver flushes asynchronously
-    return new Promise<void>((resolve) =>
-      setTimeout(() => {
-        expect(queryByTestId("demo-banner")).not.toBeNull();
-        resolve();
-      }, 10),
-    );
-  });
-});
 
 describe("Loading and SkipLink", () => {
   it("renders a status region by default", () => {

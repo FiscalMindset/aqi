@@ -3,7 +3,7 @@
 # Dhuan Detective backend image.
 #
 # Build context is the REPOSITORY ROOT (not backend/), because the image needs
-# both backend/ and the repo-level fixtures/demo/ directory that demo mode reads.
+# the backend, the real station/source data files, and the built web app.
 # SAM is configured accordingly in infra/template.yaml (DockerContext: ..).
 #
 #   docker build -f backend/Dockerfile --target lambda -t dhuan-backend:lambda .
@@ -41,11 +41,10 @@ RUN uv export --frozen --no-dev --extra agents --no-emit-project \
         --format requirements-txt --no-hashes -o /tmp/requirements.txt \
  && uv pip install --target /opt/python --no-cache -r /tmp/requirements.txt
 
-# Application source, model artifact, real data snapshot and demo recordings.
+# Application source, model artifact, real station and OSM source data.
 COPY backend/src ./src
 COPY backend/models ./models
 COPY backend/data ./data
-COPY fixtures/demo ./demo_data
 
 # --------------------------------------------------------------- runtime ----
 FROM public.ecr.aws/lambda/python:3.12-arm64 AS lambda
@@ -55,7 +54,6 @@ ENV PYTHONPATH="/opt/python:/var/task/src" \
     PYTHONDONTWRITEBYTECODE=1 \
     DHUAN_MODEL_DIR=/var/task/models \
     DHUAN_DATA_DIR=/var/task/data \
-    DEMO_DATA_DIR=/var/task/demo_data \
     AWS_EXECUTION_ENV=AWS_Lambda_python3.12
 
 WORKDIR ${LAMBDA_TASK_ROOT}
@@ -64,7 +62,6 @@ COPY --from=builder /opt/python /opt/python
 COPY --from=builder /build/src ./src
 COPY --from=builder /build/models ./models
 COPY --from=builder /build/data ./data
-COPY --from=builder /build/demo_data ./demo_data
 
 # Mangum for the API; CMD=pipeline routes to the Step Functions task handlers.
 # Built web app, served by the API so there is a single public URL.

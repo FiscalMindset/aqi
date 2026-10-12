@@ -8,14 +8,14 @@ Local dev uses uvicorn directly (see Makefile `make api`).
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 
 from dhuan.api.deps import aclose_clients
 from dhuan.api.errors import register_error_handlers
@@ -115,8 +115,8 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
-        # the demo banner needs to read this header cross-origin
-        expose_headers=["X-Dhuan-Demo", "X-Correlation-Id"],
+        # a cross-origin frontend needs the correlation id to report a problem
+        expose_headers=["X-Correlation-Id"],
     )
     app.add_middleware(ObservabilityMiddleware)
 
@@ -145,17 +145,6 @@ def create_app() -> FastAPI:
         _mount_spa(app, Path(settings.web_dir))
     else:
         logger.info("web_dir not set or missing; API only (no SPA)")
-
-    if settings.demo_mode:
-
-        @app.middleware("http")
-        async def _demo_banner_header(
-            request: Request, call_next: Callable[[Request], Awaitable[Response]]
-        ) -> Response:
-            # Rule 1: whenever demo data is served, responses advertise it.
-            response = await call_next(request)
-            response.headers["X-Dhuan-Demo"] = "1"
-            return response
 
     return app
 

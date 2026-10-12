@@ -200,7 +200,6 @@ async def explain_full(
         "served_by": estimate_obj.served_by,
         "model_version": estimate_obj.model_version,
         "data_age_seconds": estimate_obj.data_age_seconds,
-        "demo_mode": estimate_obj.demo_mode,
     }
     advice = advice_for_attribution(result, estimate)
 

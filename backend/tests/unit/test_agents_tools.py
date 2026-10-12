@@ -71,7 +71,6 @@ def test_attribution_result_roundtrip() -> None:
         confidence_reason="r",
         evidence=[],
     )
-    assert result.demo_mode is False
     assert result.tool_calls == []
 
 

@@ -16,7 +16,6 @@ class Freshness(BaseModel):
     stale: bool = Field(False, description="True when serving last-good values")
     model_version: str = Field("baseline-v1", description="Model that produced an estimate")
     source_feeds: list[str] = Field(default_factory=list, description="Feeds that answered")
-    demo_mode: bool = Field(False, description="True when DEMO_MODE is serving recorded data")
 
 
 class StationOut(BaseModel):
@@ -35,7 +34,6 @@ class StationOut(BaseModel):
 class HealthOut(BaseModel):
     status: Literal["ok"]
     version: str
-    demo_mode: bool
 
 
 class ReadyCheck(BaseModel):
@@ -47,7 +45,6 @@ class ReadyCheck(BaseModel):
 class ReadyOut(BaseModel):
     status: Literal["ready", "degraded"]
     checks: list[ReadyCheck]
-    demo_mode: bool
 
 
 class FeedStatusOut(BaseModel):
@@ -65,7 +62,6 @@ class StatusOut(BaseModel):
     model_version: str
     feeds: list[FeedStatusOut]
     coverage: dict[str, object]
-    demo_mode: bool
 
 
 class FeatureContribution(BaseModel):
@@ -98,7 +94,6 @@ class EstimateOut(BaseModel):
     served_by: str  # "model" | "nearest-station"
     cpcb_table_version: str
     honesty: str
-    demo_mode: bool
     # "Which parameters produced this number?" — answered per prediction.
     persistence_anchor_ugm3: float | None = None
     model_adjustment_ugm3: float | None = None

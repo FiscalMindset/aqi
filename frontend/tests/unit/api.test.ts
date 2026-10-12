@@ -35,17 +35,6 @@ describe("api client", () => {
     expect((err as ApiError).status).toBe(422);
   });
 
-  it("raises the demo banner flag from the response header", async () => {
-    mockFetch(
-      new Response(
-        JSON.stringify({ lat: 28.6, lon: 77.2 }),
-        { status: 200, headers: { "content-type": "application/json", "x-dhuan-demo": "1" } },
-      ),
-    );
-    document.documentElement.dataset.demo = "0";
-    await api.status();
-    expect(document.documentElement.dataset.demo).toBe("1");
-  });
 
   it("survives non-problem error bodies", async () => {
     mockFetch(

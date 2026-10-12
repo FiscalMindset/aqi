@@ -90,7 +90,6 @@ async def create_subscription(
             "id": sub_id,
             "status": status,
             "locality": existing.get("locality"),
-            "demo_mode": settings.demo_mode,
         }
     try:
         store.create(
@@ -114,7 +113,6 @@ async def create_subscription(
         "confirmation": (
             "A confirmation email has been sent; alerts activate after confirmation."
         ),
-        "demo_mode": settings.demo_mode,
     }
 
 

@@ -38,7 +38,6 @@ const attribution: Attribution = {
     },
   ],
   tool_calls: ["find_upwind_sources(...)"],
-  demo_mode: false,
 };
 
 describe("CausesPanel", () => {

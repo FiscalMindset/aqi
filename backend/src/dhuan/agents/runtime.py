@@ -171,7 +171,6 @@ def synthesize_attribution(
     *,
     evidence: list[dict[str, Any]],
     registry_ids: set[str] | None = None,
-    demo_mode: bool = False,
 ) -> AttributionResult:
     del registry_ids  # accepted for API symmetry with the model path
     """Deterministic synthesis: ranked causes, confidence, all evidence-linked.
@@ -277,7 +276,6 @@ def synthesize_attribution(
         confidence_reason=reason,
         evidence=[EvidenceItem(**e) for e in evidence],
         tool_calls=[f"{e['tool']}({json.dumps(e['args'], default=str)[:80]})" for e in evidence],
-        demo_mode=demo_mode,
     )
 
 

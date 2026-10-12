@@ -2,7 +2,7 @@
  * Typed API client for the Dhuan Detective API.
  *
  * Rules honoured here: errors are `application/problem+json`; the client
- * surfaces them as typed errors; `X-Dhuan-Demo` flips the demo banner;
+ * surfaces them as typed errors;
  * timeouts mirror the backend defaults.
  */
 
@@ -62,7 +62,6 @@ export interface Estimate {
   served_by: string;
   cpcb_table_version: string;
   honesty: string;
-  demo_mode: boolean;
   /** The nearest station's value 1h ago: the baseline the model corrects. */
   persistence_anchor_ugm3: number | null;
   /** What the model added/subtracted from that baseline. */
@@ -188,6 +187,33 @@ export interface LikelyCause {
   bearing_deg?: number | null;
 }
 
+/** One grounded sentence-group and the evidence passages it came from. */
+export interface ExplanationParagraph {
+  intent: string;
+  text: string;
+  passage_ids: string[];
+}
+
+export interface Passage {
+  passage_id: string;
+  kind: string;
+  text: string;
+  authority: number;
+  measured: boolean;
+  observed_at: string | null;
+  age_seconds: number | null;
+  source_url: string | null;
+  evidence_id: string | null;
+  facts: Record<string, unknown>;
+}
+
+export interface RetrievalTraceEntry {
+  passage_id: string;
+  kind: string;
+  score: number;
+  reasons: string[];
+}
+
 export interface Attribution {
   summary: string;
   likely_causes: LikelyCause[];
@@ -195,7 +221,6 @@ export interface Attribution {
   confidence_reason: string;
   evidence: EvidenceItem[];
   tool_calls: string[];
-  demo_mode: boolean;
 }
 
 export interface Advice {
@@ -210,9 +235,17 @@ export interface ExplainResponse {
   lat: number;
   lon: number;
   served_by: string;
+  /** Which layer wrote the prose: the deterministic composer, or Groq on top. */
+  prose_served_by: string;
   attribution: Attribution;
+  headline: string;
+  explanation: string;
+  paragraphs: ExplanationParagraph[];
+  passages: Passage[];
+  retrieval_trace: RetrievalTraceEntry[];
+  /** Inputs that failed to answer; the explanation says so rather than guessing. */
+  evidence_gaps: string[];
   advice: Advice[];
-  demo_mode: boolean;
   note: string;
 }
 
@@ -240,13 +273,6 @@ export interface StatusResponse {
     records_last_run: number;
   }>;
   coverage: Record<string, unknown>;
-  demo_mode: boolean;
-}
-
-function markDemo(res: Response): void {
-  if (res.headers.get("x-dhuan-demo") === "1") {
-    document.documentElement.dataset.demo = "1";
-  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -254,7 +280,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const res = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal });
-    markDemo(res);
     if (res.status === 204) return undefined as T;
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok) {

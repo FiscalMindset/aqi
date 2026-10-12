@@ -169,7 +169,6 @@ async def compute_estimate(
         served_by=served_by,
         cpcb_table_version=CPCB_TABLE_VERSION,
         honesty=HONESTY_NOTE,
-        demo_mode=settings.demo_mode,
         persistence_anchor_ugm3=round(anchor_value, 1) if anchor_value is not None else None,
         model_adjustment_ugm3=round(model_adjustment, 1) if model_adjustment is not None else None,
         features_used=features_used,

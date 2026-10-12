@@ -9,6 +9,7 @@ import { ModelCardPanel } from "./ModelCardPanel";
 import { CausesPanel } from "./CausesPanel";
 import { PersonaCards } from "./PersonaCards";
 import { AgentTrace } from "./AgentTrace";
+import { ExplanationPanel } from "./ExplanationPanel";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
   useEstimate,
@@ -71,6 +72,15 @@ export function Explorer() {
       >
         {showTrace ? "Hide the explanation" : "Why is the air bad here?"}
       </button>
+      {showTrace && explain.data && (
+        <ExplanationPanel
+          headline={explain.data.headline}
+          paragraphs={explain.data.paragraphs}
+          passages={explain.data.passages}
+          gaps={explain.data.evidence_gaps}
+          servedBy={explain.data.prose_served_by}
+        />
+      )}
       {showTrace && <AgentTrace explain={explain} />}
       {showTrace && explain.data && <CausesPanel attribution={explain.data.attribution} />}
       {showTrace && explain.data && <PersonaCards advice={explain.data.advice} />}

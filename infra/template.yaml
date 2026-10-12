@@ -21,15 +21,6 @@ Parameters:
       OpenSearch domain endpoint. Optional: when empty the API serves source
       lookups from the static OSM extract bundled in the image (smaller,
       coarser) and reports sources_unavailable instead of inventing data.
-  DemoMode:
-    Type: String
-    Default: "false"
-    AllowedValues: ["true", "false"]
-    Description: >
-      Serve recorded OpenAQ archive readings from the image instead of calling
-      the live feed. Every response is tagged demo_mode:true and the web app
-      shows a permanent banner. Turn this off once OPENAQ_API_KEY is stored in
-      SSM under /dhuan/openaq-api-key.
   EnableWebCdn:
     Type: String
     Default: "false"
@@ -75,7 +66,6 @@ Globals:
       Variables:
         ENV: !Ref Environment
         LOG_LEVEL: INFO
-        DEMO_MODE: !Ref DemoMode
         BEDROCK_MODEL_ID: !Ref BedrockModelId
         OPENSEARCH_ENDPOINT: !Ref OpensearchEndpoint
         OPENSEARCH_INDEX: sources

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import httpx
 import pytest
 import respx
@@ -16,8 +14,6 @@ def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     for key, value in {
         "OPENAQ_API_KEY": "test-key",
         "ENV": "test",
-        "DEMO_DATA_DIR": str(DEMO_DIR),
-        "DEMO_MODE": "1",
     }.items():
         monkeypatch.setenv(key, value)
     from dhuan.core import config
@@ -59,22 +55,10 @@ def test_estimate_outside_coverage_is_problem_json(api: TestClient) -> None:
     assert body["type"].endswith("/outside-coverage")
 
 
-def test_estimate_demo_mode_serves_recorded_anchor(api: TestClient) -> None:
-    resp = api.get("/v1/estimate", params={"lat": 28.63576, "lon": 77.22445})
-    assert resp.status_code == 200
-    body = resp.json()
-    # the recorded Delhi station anchors the estimate, with the honesty note
-    assert body["nearest_station_pm25"] is not None
-    assert "Estimate, not a measurement" in body["honesty"]
-    assert body["demo_mode"] is True
-
 
 @respx.mock
-def test_estimate_baseline_when_station_present(
-    api: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Live mode: a station reading anchors the estimate when the model is off."""
-    monkeypatch.setenv("DEMO_MODE", "0")
+def test_estimate_baseline_when_station_present(api: TestClient) -> None:
+    """A live station reading anchors the estimate when the model is off."""
     from dhuan.api.deps import get_station_cache, get_weather_cache, reset_clients
     from dhuan.core import config
 
@@ -186,7 +170,6 @@ def test_advice_for_attribution_covers_personas() -> None:
         assert a.actions
 
 
-DEMO_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "demo"
 
 
 @respx.mock

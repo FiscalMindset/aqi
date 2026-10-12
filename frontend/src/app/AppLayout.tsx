@@ -1,17 +1,15 @@
 import { Outlet } from "react-router-dom";
-import { DemoBanner } from "../components/DemoBanner";
 import { Header } from "../components/Header";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { SkipLink } from "../components/SkipLink";
 
-/** App shell: skip link, header, offline + demo banners, routed content. */
+/** App shell: skip link, header, offline notice, routed content. */
 export function AppLayout() {
   return (
     <div className="min-h-dvh flex flex-col bg-night-900 text-slate-100">
       <SkipLink />
       <Header />
       <OfflineBanner />
-      <DemoBanner />
       <main id="main" className="flex-1" tabIndex={-1}>
         <Outlet />
       </main>

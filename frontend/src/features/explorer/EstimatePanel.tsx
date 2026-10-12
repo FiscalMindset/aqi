@@ -111,9 +111,6 @@ export function EstimatePanel({
           </div>
         </dl>
       )}
-      {estimate.demo_mode && (
-        <p className="text-xs text-amber-300 mt-1">{t("demo.banner")}</p>
-      )}
     </section>
   );
 }

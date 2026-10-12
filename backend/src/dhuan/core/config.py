@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     )
 
     env: Literal["dev", "staging", "prod", "test"] = "dev"
-    demo_mode: bool = False
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"  # noqa: S104 - container binds all interfaces by design
     api_port: int = 8000
@@ -114,21 +113,15 @@ class Settings(BaseSettings):
         ]
     )
 
-    # demo data (recorded fixtures, only used when DEMO_MODE=1)
-    demo_data_dir: str = ""
     # Built web app served by the API Lambda (single public URL).
     web_dir: str = "/var/task/web"
 
-    @field_validator("demo_mode", "sms_enabled", mode="before")
+    @field_validator("sms_enabled", mode="before")
     @classmethod
     def _parse_bool(cls, v: object) -> object:
         if isinstance(v, str):
             return v.strip().lower() in {"1", "true", "yes", "on"}
         return v
-
-    @property
-    def is_demo(self) -> bool:
-        return self.demo_mode
 
 
 def _load_ssm_overrides() -> dict[str, str]:

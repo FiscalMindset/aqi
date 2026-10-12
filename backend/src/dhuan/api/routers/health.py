@@ -27,7 +27,7 @@ router = APIRouter(tags=["system"])
     response_description="Service is alive.",
 )
 async def health(settings: Settings = Depends(get_settings)) -> HealthOut:
-    return HealthOut(status="ok", version=settings.api_version, demo_mode=settings.demo_mode)
+    return HealthOut(status="ok", version=settings.api_version)
 
 
 def _check_dynamodb(settings: Settings) -> ReadyCheck:
@@ -108,6 +108,6 @@ async def ready(settings: Settings = Depends(get_settings)) -> ReadyOut | JSONRe
     ]
     ok = all(c.ok for c in checks)
     out = ReadyOut(
-        status="ready" if ok else "degraded", checks=checks, demo_mode=settings.demo_mode
+        status="ready" if ok else "degraded", checks=checks
     )
     return out if ok else JSONResponse(out.model_dump(), status_code=503)
