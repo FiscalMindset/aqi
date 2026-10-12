@@ -53,12 +53,24 @@ HONESTY_NOTE = (
 async def estimate(
     lat: Annotated[float, Query(ge=-90, le=90)],
     lon: Annotated[float, Query(ge=-180, le=180)],
+    explain: Annotated[
+        bool,
+        Query(
+            description=(
+                "Include the per-parameter contribution breakdown. Costs one "
+                "extra batched model pass, so it is opt-in: the agent and the "
+                "hot path do not need it."
+            )
+        ),
+    ] = False,
     settings: Settings = Depends(get_settings),
 ) -> EstimateOut:
-    return await compute_estimate(lat, lon, settings)
+    return await compute_estimate(lat, lon, settings, explain=explain)
 
 
-async def compute_estimate(lat: float, lon: float, settings: Settings) -> EstimateOut:
+async def compute_estimate(
+    lat: float, lon: float, settings: Settings, *, explain: bool = False
+) -> EstimateOut:
     """The estimate pipeline, callable from routes AND agent tools."""
     point = Point(lat=lat, lon=lon)
     if not point_in_ncr(point):
@@ -111,11 +123,15 @@ async def compute_estimate(lat: float, lon: float, settings: Settings) -> Estima
                 prediction.pm25_high,
             )
             model_version = f"pkl:{prediction.model_version}"
-            # Which parameters produced this number, for this point.
-            contributions = explain_features(features, artifact)
-            features_used = [FeatureContribution(**c) for c in contributions]
             anchor_value = persistence_anchor(features)
             model_adjustment = pm25_mid - anchor_value
+            if explain:
+                # Which parameters produced this number, for this point. One
+                # batched model pass; skipped by default so the hot path and the
+                # agent stay fast.
+                features_used = [
+                    FeatureContribution(**c) for c in explain_features(features, artifact)
+                ]
         except ModelNotTrainedError:
             record("EstimateModelMissing", 1)
         except Exception:

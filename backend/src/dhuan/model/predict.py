@@ -237,7 +237,6 @@ def explain_features(
     model = art["models"]["p50"]
     x = np.asarray([[features[name] for name in FEATURE_NAMES]], dtype=float)
     anchor = float(x[0, LAG1_INDEX])
-    actual = float(max(0.0, anchor + model.predict(x)[0]))
 
     neutral = dict(NEUTRAL_VALUES)
     if baseline:
@@ -248,24 +247,41 @@ def explain_features(
     # to the persistence baseline* and not a restatement of it. Without this,
     # zeroing station_lag1 would also move the anchor and dominate every row.
     held_anchor = x[0, LAG1_INDEX]
-    rows: list[dict[str, Any]] = []
+
+    # One batched predict for all features. HistGradientBoosting pays a fixed
+    # cost per predict() call regardless of batch size, so 24 sequential calls
+    # cost 24x a single call. The agent runs this inside a wall-clock guardrail,
+    # where that difference was the whole answer: "agent run exceeded
+    # wall-clock budget" versus a served explanation.
+    probe_rows: list[np.ndarray] = []
+    indices: list[int] = []
     for i, name in enumerate(FEATURE_NAMES):
         if name in {"lat", "lon", "station_lag1"}:
             # positional proxies, not physical parameters; the anchor is the
-            # baseline itself and is reported separately as `persistence_anchor`
+            # baseline itself and is reported separately as persistence_anchor
             continue
-        probe = x.copy()
-        probe[0, LAG1_INDEX] = held_anchor
-        probe[0, i] = neutral.get(name, float(np.mean(probe[0, i])))
-        pred = float(max(0.0, anchor + model.predict(probe)[0]))
+        row = x.copy()
+        row[0, LAG1_INDEX] = held_anchor
+        row[0, i] = neutral.get(name, float(np.mean(row[0, i])))
+        probe_rows.append(row)
+        indices.append(i)
+
+    actual = float(max(0.0, anchor + model.predict(x)[0]))
+    # empty only if every feature were excluded, which cannot happen
+    preds = model.predict(np.vstack(probe_rows))
+
+    rows: list[dict[str, Any]] = []
+    for i, pred in zip(indices, preds, strict=True):
+        name = FEATURE_NAMES[i]
+        value = max(0.0, float(anchor + pred))
         rows.append(
             {
                 "name": name,
                 "value": round(float(x[0, i]), 3),
                 "unit": feature_units(name),
-                "reference": round(float(probe[0, i]), 3),
-                "contribution_ugm3": round(pred - actual, 2),
-                "absolute_effect_ugm3": round(abs(pred - actual), 2),
+                "reference": round(float(neutral.get(name, float(x[0, i]))), 3),
+                "contribution_ugm3": round(value - actual, 2),
+                "absolute_effect_ugm3": round(abs(value - actual), 2),
             }
         )
     rows.sort(key=lambda r: r["absolute_effect_ugm3"], reverse=True)

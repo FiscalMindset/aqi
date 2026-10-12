@@ -47,7 +47,7 @@ async def preview_alert(
 
     from dhuan.api.routers.estimate import compute_estimate
 
-    est = await compute_estimate(body.lat, body.lon, settings)
+    est = await compute_estimate(body.lat, body.lon, settings, explain=True)
 
     weather: dict[str, Any] = {}
     wx = await weather_now(body.lat, body.lon, settings)

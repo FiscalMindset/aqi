@@ -238,8 +238,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  estimate: (lat: number, lon: number) =>
-    request<Estimate>(`/estimate?lat=${lat}&lon=${lon}`),
+  // explain=true asks the API for the per-parameter breakdown. It costs one
+  // extra batched model pass, so it is opt-in rather than always on.
+  estimate: (lat: number, lon: number, explain = true) =>
+    request<Estimate>(`/estimate?lat=${lat}&lon=${lon}&explain=${explain}`),
   stations: (lat: number, lon: number, limit = 10) =>
     request<StationReading[]>(`/stations?lat=${lat}&lon=${lon}&limit=${limit}`),
   sources: (lat: number, lon: number, radiusKm = 15, upwind = true) =>

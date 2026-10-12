@@ -9,7 +9,7 @@ from dhuan.agents.runtime import AttributionAgent, BedrockBackend, ScriptedBacke
 from dhuan.agents.schemas import PersonaAdvice
 from dhuan.agents.tools import default_registry
 from dhuan.api.errors import outside_coverage_problem
-from dhuan.api.routers.estimate import estimate as estimate_route
+from dhuan.api.routers.estimate import compute_estimate as estimate_route
 from dhuan.core.config import Settings, get_settings
 from dhuan.core.logging import get_logger
 from dhuan.core.metrics import record
