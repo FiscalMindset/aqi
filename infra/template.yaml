@@ -399,6 +399,18 @@ Resources:
               Action:
                 - ssm:GetParameter
               Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dhuan/*
+            # SecureString parameters are encrypted with the account's default
+            # SSM key. Without kms:Decrypt the GetParameter call succeeds but
+            # the decryption fails, and the caller sees a missing setting rather
+            # than a permission error - so every SSM secret silently reads as
+            # unset. Scope this to the CMK that backs the SSM key.
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
             - Effect: Allow
               Action:
                 - xray:PutTraceSegments
