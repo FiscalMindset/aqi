@@ -8,7 +8,7 @@ honest-status page backing the /status frontend route.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends
 
@@ -73,7 +73,26 @@ async def status(settings: Settings = Depends(get_settings)) -> StatusOut:
             "boundary_fetched": prov.get("fetched_utc", "unknown"),
             "boundary_license": prov.get("license", "unknown"),
         },
+        integrations=_integrations(settings),
     )
+
+
+def _integrations(settings: Settings) -> dict[str, Any]:
+    """Which optional integrations are actually wired up, by presence only.
+
+    Never reports a value or a key: only whether the credential was found, so
+    an operator can tell "the fluency pass is off" from "the credential failed
+    to load", which are otherwise indistinguishable from the outside.
+    """
+    return {
+        "stations": "openaq-api" if settings.openaq_api_key else "openaq-public-archive",
+        "agent_backend": "bedrock" if settings.bedrock_model_id else "scripted-deterministic",
+        "explanation_prose": (
+            "composed-grounded+groq" if settings.groq_api_key else "composed-grounded"
+        ),
+        "smtp": bool(settings.smtp_host and settings.smtp_username),
+        "fires": bool(settings.firms_map_key),
+    }
 
 
 def utcnow_iso() -> str:

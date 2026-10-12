@@ -194,3 +194,42 @@ def asyncio_run_step(backend: ScriptedBackend, messages: list[dict[str, str]]) -
     return asyncio.run(
         backend.step(messages=messages, tools=[], system="s", max_tokens=10)
     )
+
+
+class TestBedrockMessageFormat:
+    """Converse rejects a bare string in `content`.
+
+    This shipped broken: every Bedrock call raised ParameterValidationError and
+    the agent silently fell back, so the live path was never exercised. These
+    tests pin the wire format so it cannot regress unnoticed.
+    """
+
+    def test_string_content_becomes_a_block_list(self) -> None:
+        from dhuan.agents.runtime import _to_converse_messages
+
+        out = _to_converse_messages([{"role": "user", "content": "hello"}])
+        assert out == [{"role": "user", "content": [{"text": "hello"}]}]
+
+    def test_already_formatted_messages_pass_through(self) -> None:
+        from dhuan.agents.runtime import _to_converse_messages
+
+        original = [{"role": "user", "content": [{"text": "hi"}]}]
+        assert _to_converse_messages(original) == original
+
+    def test_every_message_ends_up_with_a_list(self) -> None:
+        from dhuan.agents.runtime import _to_converse_messages
+
+        out = _to_converse_messages(
+            [
+                {"role": "user", "content": "a"},
+                {"role": "assistant", "content": "b"},
+                {"role": "user", "content": [{"text": "c"}]},
+            ]
+        )
+        assert all(isinstance(m["content"], list) for m in out)
+        assert [m["role"] for m in out] == ["user", "assistant", "user"]
+
+    def test_empty_message_list_is_empty(self) -> None:
+        from dhuan.agents.runtime import _to_converse_messages
+
+        assert _to_converse_messages([]) == []

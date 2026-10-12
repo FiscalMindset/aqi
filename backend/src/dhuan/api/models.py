@@ -57,6 +57,10 @@ class FeedStatusOut(BaseModel):
 
 
 class StatusOut(BaseModel):
+    integrations: dict[str, object] = Field(
+        default_factory=dict,
+        description="Which optional integrations are configured (presence only, never values)",
+    )
     status: Literal["ok", "degraded"]
     api_version: str
     model_version: str

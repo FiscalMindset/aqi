@@ -54,6 +54,24 @@ class ModelStep:
     tool_args: dict[str, Any] = field(default_factory=dict)
 
 
+def _to_converse_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert flat {role, content: str} messages to Bedrock's block format.
+
+    Converse rejects a bare string in `content`: every message has to carry a
+    list of content blocks. Passing strings straight through fails at call time
+    with a botocore ParameterValidationError, which is why the Bedrock path
+    never actually worked and every run silently fell back.
+    """
+    out: list[dict[str, Any]] = []
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, str):
+            out.append({"role": message["role"], "content": [{"text": content}]})
+        else:
+            out.append(message)
+    return out
+
+
 class BedrockBackend:
     """Amazon Bedrock Converse with tool use (the live path)."""
 
@@ -97,7 +115,7 @@ class BedrockBackend:
         response = await asyncio.to_thread(
             self._client.converse,
             modelId=self.model_id,
-            messages=messages,
+            messages=_to_converse_messages(messages),
             system=[{"text": system}],
             toolConfig=tool_config,
             inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},

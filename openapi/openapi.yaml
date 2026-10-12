@@ -2041,6 +2041,12 @@
       },
       "StatusOut": {
         "properties": {
+          "integrations": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Integrations",
+            "description": "Which optional integrations are configured (presence only, never values)"
+          },
           "status": {
             "type": "string",
             "enum": [
