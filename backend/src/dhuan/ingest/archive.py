@@ -37,7 +37,7 @@ logger = get_logger("ingest.archive")
 
 # The compact per-station index built by scripts/build_station_index.py from the
 # archive snapshot. It is the same data the model trained on.
-DEFAULT_INDEX = Path(__file__).resolve().parents[2] / "data" / "station_index.json"
+DEFAULT_INDEX = Path(__file__).resolve().parents[3] / "data" / "station_index.json"
 
 INDEX_ENV = "DHUAN_STATION_INDEX"
 

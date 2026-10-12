@@ -152,7 +152,7 @@ async def test_no_api_key_skips_groq_entirely() -> None:
     text, served = await _run(_settings(groq_api_key=""))
     assert not route.called
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -163,7 +163,7 @@ async def test_disabled_groq_skips_the_call() -> None:
     text, served = await _run(_settings(groq_enabled=False))
     assert not route.called
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -172,7 +172,7 @@ async def test_any_http_error_keeps_the_composed_text(status: int) -> None:
     respx.post(GROQ_URL).mock(return_value=httpx.Response(status, json={"error": "no"}))
     text, served = await _run(_settings())
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -180,7 +180,7 @@ async def test_network_failure_keeps_the_composed_text() -> None:
     respx.post(GROQ_URL).mock(side_effect=httpx.ConnectError("dns failure"))
     text, served = await _run(_settings())
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -188,7 +188,7 @@ async def test_timeout_keeps_the_composed_text() -> None:
     respx.post(GROQ_URL).mock(side_effect=httpx.ReadTimeout("too slow"))
     text, served = await _run(_settings())
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -196,7 +196,7 @@ async def test_malformed_json_keeps_the_composed_text() -> None:
     respx.post(GROQ_URL).mock(return_value=httpx.Response(200, text="<html>oops</html>"))
     text, served = await _run(_settings())
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -204,7 +204,7 @@ async def test_empty_choices_keeps_the_composed_text() -> None:
     respx.post(GROQ_URL).mock(return_value=httpx.Response(200, json={"choices": []}))
     text, served = await _run(_settings())
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -214,7 +214,7 @@ async def test_null_content_keeps_the_composed_text() -> None:
     )
     text, served = await _run(_settings())
     assert served == "composed-grounded"
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -230,7 +230,7 @@ async def test_an_invented_number_is_rejected() -> None:
     assert served == "composed-grounded"
     assert "Anand Vihar" not in text
     assert "340" not in text
-    assert text == ORIGINAL
+    assert text == BODY
 
 
 @respx.mock
@@ -255,11 +255,9 @@ async def test_an_invented_recommendation_is_allowed_through_but_is_risky() -> N
 
 @respx.mock
 async def test_a_rewrite_of_the_identical_text_is_still_grounded() -> None:
-    respx.post(GROQ_URL).mock(
-        return_value=httpx.Response(200, json=_completion(ORIGINAL))
-    )
+    respx.post(GROQ_URL).mock(return_value=httpx.Response(200, json=_completion(BODY)))
     text, served = await _run(_settings())
-    assert text == ORIGINAL
+    assert text == BODY
     assert served in {"composed-grounded", "composed-grounded+groq"}
 
 
@@ -318,7 +316,8 @@ async def test_the_explanation_survives_groq_being_completely_down() -> None:
     )
 
     assert served == "composed-grounded"
-    assert text == f"{answer.headline} {answer.body}"
+    assert text == answer.body
+    assert text != answer.headline  # the headline is never folded into the body
     # every fact still made it into the answer
     assert "Ghazipur" in text
     assert "223" in text
@@ -367,3 +366,16 @@ async def test_a_groq_rewrite_keeps_the_citations_intact() -> None:
     for para in answer.paragraphs:
         assert para.passage_ids                    # still cited
         assert set(para.passage_ids) <= {p.passage_id for p in answer.passages}
+
+
+@respx.mock
+async def test_the_headline_is_never_handed_to_the_model() -> None:
+    """The headline is composed, not generated, so it cannot be rewritten."""
+    route = respx.post(GROQ_URL).mock(
+        return_value=httpx.Response(200, json=_completion(BODY))
+    )
+    await _run(_settings())
+    body = route.calls[0].request.content.decode()
+    assert "do not repeat" in body
+    # the headline is present only as clearly-labelled context
+    assert "unhealthy for everyone" in body

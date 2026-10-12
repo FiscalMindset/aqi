@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import re
 from itertools import pairwise
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -21,7 +20,48 @@ from dhuan.core.config import get_settings
 from dhuan.core.units import Point
 from dhuan.ingest.osrm import RouteCandidate, sample_along, straight_line_fallback
 
-DEMO_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "demo"
+# The corridor comparison samples the model along each route, which needs real
+# station readings. These tests previously leaned on DEMO_MODE for that; with
+# demo mode gone the same facts come from a mocked OpenAQ station instead.
+_STATION_LAT, _STATION_LON = 28.63576, 77.22445
+
+
+def _mock_openaq(value: float = 168.0, lat: float | None = None) -> None:
+    """A single official station that the corridor sampling can anchor to."""
+    station_lat = _STATION_LAT if lat is None else lat
+    respx.get("https://api.openaq.org/v3/locations").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": 8118,
+                        "name": "New Delhi",
+                        "coordinates": {"latitude": station_lat, "longitude": _STATION_LON},
+                        "provider": {"name": "AirNow"},
+                        "sensors": [{"id": 23534, "parameter": {"name": "pm25"}}],
+                        "datetimeLast": {"utc": "2026-10-01T00:00:00Z"},
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://api.openaq.org/v3/locations/8118/latest").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "datetime": {"utc": "2026-10-10T20:00:00Z"},
+                        "value": value,
+                        "coordinates": {"latitude": station_lat, "longitude": _STATION_LON},
+                        "sensorsId": 23534,
+                        "locationsId": 8118,
+                    }
+                ]
+            },
+        )
+    )
 
 
 class TestSampling:
@@ -64,8 +104,6 @@ def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     for key, value in {
         "OPENAQ_API_KEY": "test-key",
         "ENV": "test",
-        "DEMO_DATA_DIR": str(DEMO_DIR),
-        "DEMO_MODE": "1",
     }.items():
         monkeypatch.setenv(key, value)
     from dhuan.core import config
@@ -129,6 +167,7 @@ class TestCompareEndpoint:
     @respx.mock
     def test_ranks_by_exposure_not_by_distance(self, api: TestClient) -> None:
         """The whole point: the longer route can be the cleaner one."""
+        _mock_openaq()
         short_dirty = _osrm_route(
             [[77.209, 28.6139], [77.19, 28.65], [77.1025, 28.7146]], 9000, 600
         )
@@ -160,6 +199,7 @@ class TestCompareEndpoint:
 
     @respx.mock
     def test_router_failure_falls_back_and_says_so(self, api: TestClient) -> None:
+        _mock_openaq()
         self._weather_mock()
         self._osrm_mock(None)
         r = api.post(

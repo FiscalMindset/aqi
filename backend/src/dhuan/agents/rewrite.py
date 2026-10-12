@@ -91,7 +91,9 @@ async def rewrite_explanation(
     `served_by` is `composed-grounded` when the deterministic text was kept and
     `composed-grounded+groq` when Groq's rewrite passed the guard.
     """
-    original = " ".join(part for part in (headline, body) if part).strip()
+    # Only the body is rewritten. The headline is composed separately and is
+    # never handed to the model, so a rewrite cannot duplicate or contradict it.
+    original = body.strip()
     if not settings.groq_enabled or not settings.groq_api_key or not original:
         return original, "composed-grounded"
 
@@ -99,7 +101,10 @@ async def rewrite_explanation(
         f"- [{p.get('kind', 'fact')!s}] {p.get('text', '')!s}" for p in passages[:12]
     )
     user = (
-        f"Evidence passages:\n{evidence}\n\n"
+        "Evidence passages:\n"
+        f"{evidence}\n\n"
+        f"A one-line summary of the situation, for context only - do not repeat "
+        f"it:\n{headline}\n\n"
         f"Text to rewrite:\n{original}"
     )
     try:

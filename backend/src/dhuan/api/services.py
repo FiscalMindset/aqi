@@ -11,7 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from dhuan.api.demo import demo_age_seconds, stations_near_demo
 from dhuan.api.deps import (
     get_openaq,
     get_station_cache,
@@ -24,6 +23,12 @@ from dhuan.core.http import UpstreamError
 from dhuan.core.logging import get_logger, log_event
 from dhuan.core.metrics import record
 from dhuan.core.units import Point, haversine_km
+from dhuan.ingest.archive import (
+    ArchiveUnavailableError,
+)
+from dhuan.ingest.archive import (
+    readings_near as archive_readings_near,
+)
 from dhuan.ingest.openaq import NotConfiguredError
 from dhuan.ingest.types import Reading, WeatherObservation
 from dhuan.model.cpcb import category_for_pm25
@@ -32,6 +37,10 @@ logger = get_logger("api.services")
 
 STATION_TTL_SECONDS = 900.0
 WEATHER_TTL_SECONDS = 1800.0
+
+# Archive readings are as old as the daily files OpenAQ publishes. Beyond this
+# we still serve them, but flag them stale so the UI can say so out loud.
+ARCHIVE_STALE_AFTER_SECONDS = 36 * 3600.0
 
 
 @dataclass(slots=True)
@@ -46,19 +55,23 @@ class FeedOutcome[T]:
 async def stations_near(
     lat: float, lon: float, settings: Settings | None = None
 ) -> FeedOutcome[list[Reading]]:
-    """Latest PM2.5 readings from OpenAQ stations nearest the point.
+    """Latest PM2.5 readings from official stations nearest the point.
 
-    DEMO_MODE (default off) serves recorded real archive data, tagged so the
-    UI shows its permanent banner.
+    Two real sources, in order of preference:
+
+    1. The OpenAQ v3 API, when a key is configured. Freshest, but needs a
+       credential.
+    2. The OpenAQ **public archive**, which needs no credential. This is the same
+       data the model was trained on, distilled into a compact per-station index.
+       An archive reading is as old as the archive, so the age is carried through
+       and `stale` is set when it exceeds the threshold.
+
+    If neither source can answer we raise a typed Problem. We never fabricate a
+    reading and we never fall back to demo data.
     """
     s = settings or get_settings()
-    if s.demo_mode:
-        readings = stations_near_demo(lat, lon)
-        record("FeedStationsDemoServed", 1)
-        return FeedOutcome(readings, demo_age_seconds(), stale=False, ok=True)
     cache = get_station_cache()
     key = f"stations:{lat:.3f}:{lon:.3f}"
-
 
     async def fetch() -> list[Reading]:
         client = get_openaq(s)
@@ -82,16 +95,50 @@ async def stations_near(
             enriched.append(r)
         return enriched
 
+    if not s.openaq_api_key:
+        # No credential: the archive is the real source, not a demo. It is
+        # local and cached, so we skip the HTTP cache and record its true age.
+        outcome = archive_readings(lat, lon)
+        if outcome is not None:
+            record("FeedStationsArchiveServed", 1)
+            return outcome
+
     try:
         value, age, stale = await cache.get_or_fetch(key, fetch, ttl_seconds=STATION_TTL_SECONDS)
         record("FeedStationsServed", 1)
         return FeedOutcome(value, age, stale, ok=True)
     except NotConfiguredError as exc:
         record("FeedStationsMissingConfig", 1)
+        if archive_readings(lat, lon) is not None:  # pragma: no cover - defensive
+            raise
         raise not_configured_problem("OpenAQ") from exc
     except UpstreamError as exc:
         record("FeedStationsFailed", 1)
+        # last-good: serve the archive rather than failing the whole request
+        fallback = archive_readings(lat, lon)
+        if fallback is not None:
+            logger.warning("openaq_failed_serving_archive: %s", exc)
+            return fallback
         raise upstream_problem("OpenAQ", str(exc)) from exc
+
+
+def archive_readings(lat: float, lon: float) -> FeedOutcome[list[Reading]] | None:
+    """Nearest archive readings with their true age, or None if unavailable."""
+    try:
+        readings = archive_readings_near(lat, lon)
+    except ArchiveUnavailableError as exc:
+        logger.warning("archive_unavailable: %s", exc)
+        return None
+    if not readings:
+        return None
+    newest = max(r.observed_at for r in readings)
+    age = max(0.0, (datetime.now(UTC) - newest).total_seconds())
+    return FeedOutcome(
+        readings,
+        age_seconds=age,
+        stale=age > ARCHIVE_STALE_AFTER_SECONDS,
+        ok=True,
+    )
 
 
 async def weather_now(

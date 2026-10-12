@@ -102,6 +102,9 @@ def main() -> int:
         "schema": 1,
         "provenance": {
             **provenance,
+            # a canonical single field so readers do not have to know the
+            # nested shape the snapshot builder happened to use
+            "source": "openaq-public-archive",
             "built_by": "scripts/build_station_index.py",
             "built_utc": datetime.now(UTC).isoformat(),
             "note": (
