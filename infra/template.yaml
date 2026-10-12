@@ -21,6 +21,15 @@ Parameters:
       OpenSearch domain endpoint. Optional: when empty the API serves source
       lookups from the static OSM extract bundled in the image (smaller,
       coarser) and reports sources_unavailable instead of inventing data.
+  BackendImage:
+    Type: String
+    Default: ""
+    Description: >
+      Full ECR URI of the backend image, e.g.
+      123456789012.dkr.ecr.ap-south-1.amazonaws.com/dhuan-backend:<sha>.
+      Required. The image is built and pushed out of band (see
+      scripts/deploy_staging.sh), so `sam deploy` never needs a Docker daemon
+      and the deployed digest is exactly what was tested.
   EnableWebCdn:
     Type: String
     Default: "false"
@@ -55,6 +64,11 @@ Conditions:
   WebBucketNameProvided: !Not [!Equals [!Ref WebBucketName, ""]]
   WebCdnEnabled: !Equals [!Ref EnableWebCdn, "true"]
   WebCdnDisabled: !Equals [!Ref EnableWebCdn, "false"]
+  # The image is always referenced explicitly. There is deliberately no
+  # `Metadata: Dockerfile` on these functions: its presence makes SAM require a
+  # Docker daemon on every deploy, which would put an unversioned local build
+  # between the tested artifact and production.
+  UseBackendImage: !Not [!Equals [!Ref BackendImage, ""]]
 
 Globals:
   Function:
@@ -352,12 +366,10 @@ Resources:
   # ------------------------------------------------------------- functions --
   ApiFunction:
     Type: AWS::Serverless::Function
-    Metadata:
-      Dockerfile: backend/Dockerfile
-      DockerContext: ..
     Properties:
       FunctionName: !Sub dhuan-api-${Environment}
       PackageType: Image
+      ImageUri: !If [UseBackendImage, !Ref BackendImage, ""]
       MemorySize: 1024
       Timeout: 30
       Architectures: [arm64]
@@ -395,12 +407,10 @@ Resources:
 
   PipelineFunction:
     Type: AWS::Serverless::Function
-    Metadata:
-      Dockerfile: backend/Dockerfile
-      DockerContext: ..
     Properties:
       FunctionName: !Sub dhuan-pipeline-${Environment}
       PackageType: Image
+      ImageUri: !If [UseBackendImage, !Ref BackendImage, ""]
       MemorySize: 2048
       Timeout: 900
       Architectures: [arm64]

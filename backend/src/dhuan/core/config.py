@@ -132,7 +132,10 @@ def _load_ssm_overrides() -> dict[str, str]:
     get_settings' lru_cache for the lifetime of the process.
     """
     wanted = ("SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
-              "SMTP_PORT", "OPENAQ_API_KEY", "FIRMS_MAP_KEY")
+              "SMTP_PORT", "OPENAQ_API_KEY", "FIRMS_MAP_KEY",
+              # Groq is an optional fluency pass; without this parameter the
+              # explanation is composed locally, which is a supported state.
+              "GROQ_API_KEY", "GROQ_MODEL")
     import boto3
 
     try:
