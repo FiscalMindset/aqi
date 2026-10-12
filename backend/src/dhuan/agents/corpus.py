@@ -258,10 +258,10 @@ def build_passages(
 
     # ---- weather and ventilation ------------------------------------------
     if weather:
-        w = weather
-        speed = w.get("wind_speed_ms")
-        gust = w.get("wind_gust_ms")
-        direction = w.get("wind_direction_deg")
+        w: dict[str, Any] = weather
+        speed: float | None = w.get("wind_speed_ms")
+        gust: float | None = w.get("wind_gust_ms")
+        direction: float | None = w.get("wind_direction_deg")
         parts: list[str] = []
         if speed is not None:
             parts.append(f"Wind is {float(speed):.1f} metres per second")
