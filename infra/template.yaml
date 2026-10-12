@@ -370,7 +370,9 @@ Resources:
       FunctionName: !Sub dhuan-api-${Environment}
       PackageType: Image
       ImageUri: !If [UseBackendImage, !Ref BackendImage, ""]
-      MemorySize: 1024
+      # /v1/grid serialises ~46k H3 polygons into one GeoJSON document. 1024 MB
+      # was not enough headroom for that alongside the model.
+      MemorySize: 2048
       Timeout: 30
       Architectures: [arm64]
       AutoPublishAlias: live

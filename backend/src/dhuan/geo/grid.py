@@ -7,7 +7,9 @@ takes well under a second.
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from pathlib import Path
 
 import h3
 import numpy as np
@@ -59,9 +61,31 @@ def _inside_mask(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     return inside
 
 
+# The cell set is deterministic for a given resolution and costs ~100 s to
+# enumerate from the boundary polygon. It is precomputed into the image instead,
+# so the route never pays that cost per request.
+CELLS_DIR = Path(__file__).resolve().parents[3] / "data"
+
+
 @lru_cache(maxsize=8)
+def _precomputed_cells(resolution: int) -> tuple[str, ...] | None:
+    path = CELLS_DIR / f"grid_cells_res{resolution}.json"
+    if not path.exists():
+        return None
+    cached: list[str] = json.loads(path.read_text())
+    return tuple(cached)
+
+
 def grid_cells(resolution: int = 8) -> tuple[str, ...]:
     """All H3 cells whose centroid lands inside the NCR boundary."""
+    precomputed = _precomputed_cells(resolution)
+    if precomputed is not None:
+        return precomputed
+    return _enumerate_cells(resolution)
+
+
+def _enumerate_cells(resolution: int = 8) -> tuple[str, ...]:
+    """Enumerate from the boundary polygon. Used when no precomputed file exists."""
     all_lats: list[float] = []
     all_lons: list[float] = []
     for ring in rings():
