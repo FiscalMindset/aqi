@@ -124,6 +124,9 @@ class Settings(BaseSettings):
         return v
 
 
+logger = logging.getLogger(__name__)
+
+
 def _load_ssm_overrides() -> dict[str, str]:
     """Read /dhuan/* from SSM so secrets never ship in the image or env vars.
 
@@ -140,21 +143,30 @@ def _load_ssm_overrides() -> dict[str, str]:
 
     try:
         client = boto3.client("ssm")
-    except Exception:
+    except Exception as exc:
+        logger.warning("ssm_client_unavailable: %s", exc)
         return {}
     out: dict[str, str] = {}
+    failures: list[str] = []
     for name in wanted:
         try:
             resp = client.get_parameter(Name=f"/dhuan/{name}", WithDecryption=True)
-        except Exception:
+        except Exception as exc:
+            # "parameter does not exist" is normal locally and in LocalStack.
+            # Anything else - a decryption failure, a denied call - means a
+            # configured secret is silently reading as unset, which is exactly
+            # the failure mode this used to hide.
+            if "ParameterNotFound" not in type(exc).__name__:
+                failures.append(f"{name}:{type(exc).__name__}")
             continue
         value = resp.get("Parameter", {}).get("Value")
         if value:
             out[name.lower()] = value
+    if failures:
+        logger.warning("ssm_parameter_read_failed: %s", ",".join(failures))
+    if out:
+        logger.info("ssm_overrides_loaded: %s", ",".join(sorted(out)))
     return out
-
-
-logger = logging.getLogger(__name__)
 
 
 @lru_cache
