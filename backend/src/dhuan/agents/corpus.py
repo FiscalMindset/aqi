@@ -279,7 +279,9 @@ def build_passages(
                         "speed": speed,
                         "gust": gust,
                         "direction": direction,
-                        "direction_label": compass(float(direction)) if direction is not None else None,
+                        "direction_label": (
+                            compass(float(direction)) if direction is not None else None
+                        ),
                     },
                     authority=0.8,
                     age_seconds=w.get("age_seconds"),
