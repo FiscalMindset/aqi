@@ -168,7 +168,7 @@ class SubscriptionsStore:
 
     @staticmethod
     def make_id(email: str, locality: str) -> str:
-        import hashlib  # noqa: PLC0415 - tiny, used once
+        import hashlib
 
         raw = f"{email.strip().lower()}|{locality.strip().lower()}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
@@ -182,6 +182,7 @@ class SubscriptionsStore:
         threshold_category: str,
         confirmed: bool = False,
         pending_token: str | None = None,
+        unsubscribe_token: str | None = None,
     ) -> str:
         sub_id = self.make_id(email, locality)
         now = datetime.now(UTC)
@@ -199,6 +200,8 @@ class SubscriptionsStore:
                 "last_band": None,
                 "last_alerted_at": None,
                 "pending_token": pending_token,
+                # token embedded in the unsubscribe link inside every alert email
+                "unsubscribe_token": unsubscribe_token,
             },
             ConditionExpression="attribute_not_exists(pk)",
         )
@@ -208,6 +211,25 @@ class SubscriptionsStore:
         resp = self.table.get_item(Key={"pk": f"sub#{sub_id}"})
         item: dict[str, Any] | None = resp.get("Item")
         return item
+
+    def get_by_unsubscribe_token(self, token: str) -> dict[str, Any] | None:
+        """Find a subscription by the token embedded in an alert email.
+
+        Scans rather than using the GSI because the token is a random secret, not
+        a partition key we can derive from a query.
+        """
+        from boto3.dynamodb.conditions import Attr
+
+        resp = self.table.scan(
+            FilterExpression=Attr("unsubscribe_token").eq(token),
+            Limit=1,
+            ProjectionExpression="pk",
+        )
+        items = resp.get("Items") or []
+        if not items:
+            return None
+        pk = str(items[0]["pk"])
+        return self.get(pk[len("sub#") :])
 
     def confirm(self, sub_id: str) -> None:
         self.table.update_item(

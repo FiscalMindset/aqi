@@ -30,7 +30,20 @@ from dhuan.model.features import (
 ARTIFACTS = Path(__file__).resolve().parents[3] / "models"
 DATA = Path(__file__).resolve().parents[3] / "data"
 RANDOM_SEED = 42
-TEMPORAL_HOLDOUT_START = "2023-11-01"
+# Fraction of the time span held out for the "future hours" evaluation. A
+# fraction rather than a fixed date, because the snapshot window moves: pinning
+# 2023-11-01 meant that when the data was refreshed to 2026 every row landed in
+# the test split and nothing was left to train on.
+TEMPORAL_HOLDOUT_FRACTION = 0.20
+
+# Upper bound on rows used to fit one model. The refreshed snapshot has ~591k
+# rows across 77 stations; leave-one-station-out then means 77 separate fits, and
+# at 600 boosting iterations each that is hours of compute for no measurable
+# gain. 150k rows is far more than these trees need to reach the same accuracy.
+MAX_TRAIN_ROWS = 150_000
+# Folds for the unseen-location evaluation (stations are the groups).
+UNSEEN_LOCATION_FOLDS = 8
+RANDOM_SEED_FIT = 20261012
 MAX_STATION_COUNT = 4
 
 
@@ -63,7 +76,7 @@ class Evaluation:
     n_rows: int
     stations: list[dict[str, Any]]
     temporal_holdout: Metrics
-    loso_stations: list[dict[str, Any]]
+    loso_stations: list[dict[str, Any]]  # one entry per fold
     loso_mean: Metrics
     baselines: dict[str, dict[str, float]]
     winner: str
@@ -116,8 +129,19 @@ def _fit_models(x: np.ndarray, y: np.ndarray) -> dict[str, HistGradientBoostingR
     return models
 
 
+def _subsample(matrix: np.ndarray, y: np.ndarray, cap: int) -> tuple[np.ndarray, np.ndarray]:
+    """Random subsample, capped, so folds stay affordable."""
+    if len(y) <= cap:
+        return matrix, y
+    rng = np.random.default_rng(RANDOM_SEED_FIT)
+    idx = rng.choice(len(y), size=cap, replace=False)
+    idx.sort()
+    return matrix[idx], y[idx]
+
+
 def _fit_anchored(matrix: np.ndarray, y: np.ndarray) -> dict[str, Any]:
     """Fit the three quantile models on the persistence-anchored residual."""
+    matrix, y = _subsample(matrix, y, MAX_TRAIN_ROWS)
     anchor = persistence_anchor(matrix)
     return _fit_models(matrix, y - anchor)
 
@@ -191,7 +215,9 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
     y = np.asarray(labels, dtype=float)
     labels_station = np.asarray([m["location_id"] for m in meta])
     ts = [datetime.fromisoformat(m["ts"]) for m in meta]
-    holdout_start = datetime.fromisoformat(TEMPORAL_HOLDOUT_START)
+    # newest TEMPORAL_HOLDOUT_FRACTION of the window is the future-hours test set
+    ordered = sorted(ts)
+    holdout_start = ordered[int(len(ordered) * (1 - TEMPORAL_HOLDOUT_FRACTION))]
     temporal_mask = np.asarray([t >= holdout_start for t in ts])
 
     # Bound for the anchored correction. Without it an out-of-distribution
@@ -202,7 +228,7 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
     # (computed after the temporal split below, where tr_mask exists)
     notes: list[str] = []
     if len(set(labels_station)) <= 1:
-        notes = ["Only one station available; leave-one-station-out is degenerate."]
+        notes = ["Only one station available; the unseen-location folds are degenerate."]
 
     # ---- temporal holdout: train old months, test the last two -----------
     tr_mask = np.logical_not(temporal_mask)
@@ -227,26 +253,38 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
     )
     temporal.mae = temporal.mae  # keep as-is; conformal affects the interval only
 
-    # ---- leave-one-station-out -------------------------------------------
+    # ---- unseen-location validation --------------------------------------
+    # Grouped k-fold over stations rather than leave-one-station-out. With 77
+    # stations LOSO means 77 full fits (231 models) for hours of compute, and a
+    # single held-out station is a high-variance estimate of "how well does this
+    # work somewhere new". K folds, each holding out a whole group of stations,
+    # answers the same question at a fraction of the cost.
     loso_rows: list[dict[str, Any]] = []
     station_ids = sorted(set(labels_station.tolist()))
-    for held in station_ids:
-        m_tr = labels_station != held
-        m_te = labels_station == held
-        if m_te.sum() < 50:
+    n_groups = min(UNSEEN_LOCATION_FOLDS, len(station_ids))
+    assignments = {
+        sid: g % n_groups for g, sid in enumerate(station_ids)
+    }
+    group_of = np.asarray([assignments[int(s)] for s in labels_station])
+    for fold in range(n_groups):
+        m_te = group_of == fold
+        m_tr = ~m_te
+        if m_te.sum() < 50 or m_tr.sum() < 50:
             continue
         models_s = _fit_anchored(matrix[m_tr], y[m_tr])
         lo_s, mid_s, hi_s = _predict_anchored(models_s, matrix[m_te])
+        held = [int(s) for s in labels_station[m_te]]
         loso_rows.append(
             {
-                "station": held,
+                "fold": fold,
+                "stations": sorted(set(held)),
                 "n_test": int(m_te.sum()),
                 **asdict(_metrics(y[m_te], lo_s, mid_s, hi_s, n_train=int(m_tr.sum()))),
             }
         )
     if loso_rows:
         loso_mean = Metrics(
-            n_train=int(len(y) - min(r["n_test"] for r in loso_rows)),
+            n_train=int(sum(r["n_train"] for r in loso_rows) // max(len(loso_rows), 1)),
             n_test=int(sum(r["n_test"] for r in loso_rows)),
             mae=float(np.mean([r["mae"] for r in loso_rows])),
             rmse=float(np.mean([r["rmse"] for r in loso_rows])),
@@ -257,7 +295,7 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
         )
     else:
         loso_mean = _baseline_metrics(y, y)
-        notes.append("LOSO could not run (insufficient stations).")
+        notes.append("Unseen-location folds could not run (insufficient stations).")
 
     # ---- baselines on the temporal holdout --------------------------------
     # (a) global training mean, (b) per-station climatology, (c) persistence:

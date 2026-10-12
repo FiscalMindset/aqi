@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
     smtp_starttls: bool = True
+    # Public base URL of the web app, used for links inside alert emails.
+    public_web_url: str = ""
     alert_email_from_name: str = "Dhuan Detective"
     ssm_parameter_prefix: str = "/dhuan"
 

@@ -21,6 +21,7 @@ from dhuan.api.deps import aclose_clients
 from dhuan.api.errors import register_error_handlers
 from dhuan.api.middleware import ObservabilityMiddleware
 from dhuan.api.routers import (
+    alert_preview,
     estimate,
     explain,
     grid,
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     app.include_router(explain.router)
     app.include_router(subscriptions.router)
     app.include_router(model_card.router)
+    app.include_router(alert_preview.router)
 
     # ------------------------------------------------------------------ SPA --
     # The built web app is served by the same Lambda that serves the API, so

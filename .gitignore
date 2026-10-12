@@ -35,6 +35,8 @@ test-results/
 
 # Data artifacts (large, regenerated)
 data/raw/*.csv.gz
+# 131 MB raw snapshot exceeds GitHub's 100 MB file limit; the .gz is committed
+backend/data/training_snapshot.json
 data/processed/*.parquet
 backend/models/*.joblib
 artifacts/

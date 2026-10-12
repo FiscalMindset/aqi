@@ -151,6 +151,7 @@ class SmtpAlerter:
         subject: str,
         body: str,
         message_attributes: dict[str, Any] | None = None,  # noqa: ARG002 - parity with SnsAlerter
+        html: str | None = None,
     ) -> str:
         import smtplib
         from email.message import EmailMessage
@@ -168,6 +169,10 @@ class SmtpAlerter:
         msg["To"] = email
         msg["X-Dhuan-Locality"] = locality
         msg.set_content(body)
+        if html:
+            # multipart/alternative: plain text first, HTML second. Mail clients
+            # that cannot render the HTML fall back to the text part.
+            msg.add_alternative(html, subtype="html")
         try:
             with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=20) as srv:
                 if self.settings.smtp_starttls:

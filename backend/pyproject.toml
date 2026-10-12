@@ -100,6 +100,10 @@ ignore = [
 # settings: boto3 is imported lazily and SSM ParameterNotFound is expected
 "src/dhuan/core/config.py" = ["PLC0415", "S112"]
 "src/dhuan/api/routers/model_card.py" = ["PLC0415"]
+"src/dhuan/api/routers/alert_preview.py" = ["PLC0415"]
+"src/dhuan/store/dynamodb.py" = ["PLC0415"]
+# Email HTML is one long literal template; line length and dashes are content.
+"src/dhuan/alerts/email_template.py" = ["E501", "RUF001", "RUF002", "RUF003"]
 "src/dhuan/alerts/*" = ["PLC0415"]
 
 [tool.mypy]

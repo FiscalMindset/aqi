@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from html import escape
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import HTMLResponse
 
 from dhuan.api.errors import (
     Problem,
@@ -74,6 +76,7 @@ async def create_subscription(
             detail=f"threshold_category must be one of {list(CATEGORIES)}",
         )
     token = uuid4().hex[:16]
+    unsubscribe_token = uuid4().hex[:24]
     store = SubscriptionsStore(settings)
     try:
         sub_id = store.make_id(body.email, body.locality)
@@ -97,6 +100,7 @@ async def create_subscription(
             lon=body.lon,
             threshold_category=body.threshold_category,
             pending_token=token,
+        unsubscribe_token=unsubscribe_token,
         )
     except Exception as exc:
         raise _store_unavailable(exc) from exc
@@ -140,6 +144,54 @@ async def confirm_subscription(
     store.confirm(id)
     record("SubscriptionsConfirmed", 1)
     return {"id": id, "status": "confirmed", "locality": existing.get("locality")}
+
+
+@router.get(
+    "/subscriptions/unsubscribe",
+    summary="One-click unsubscribe from an alert email link",
+    response_description="A confirmation page; nothing is emailed.",
+)
+async def unsubscribe_by_token(
+    token: Annotated[str, Query(min_length=8)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> HTMLResponse:
+    """Unsubscribe by clicking the link at the bottom of an alert.
+
+    A GET is deliberate: mail clients and webmail scanners follow links without
+    a session, and a confirmation click is already the user's intent.
+    """
+    store = SubscriptionsStore(settings)
+    existing = store.get_by_unsubscribe_token(token)
+    ok = False
+    locality = ""
+    if existing is not None:
+        sub_id = str(existing["pk"]).removeprefix("sub#")
+        locality = str(existing.get("locality", ""))
+        store.delete(sub_id)
+        _sns_unsubscribe(settings, str(existing.get("email", "")))
+        record("SubscriptionsDeleted", 1)
+        ok = True
+    return HTMLResponse(_unsubscribe_page(ok, locality), status_code=200)
+
+
+def _unsubscribe_page(ok: bool, locality: str) -> str:
+    head = "You are unsubscribed" if ok else "That link did not match a subscription"
+    detail = (
+        f"No more alerts for {escape(locality)}."
+        if ok and locality
+        else ("The link may have been used already." if not ok else "No more alerts.")
+    )
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{head}</title></head>
+<body style="margin:0;padding:40px 16px;background:#f1f5f9;font-family:-apple-system,
+BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<div style="max-width:460px;margin:0 auto;background:#fff;border-radius:14px;padding:28px;">
+<h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;">{head}</h1>
+<p style="margin:0 0 20px;font-size:14px;color:#475569;">{detail}</p>
+<a href="/" style="display:inline-block;padding:10px 18px;background:#059669;color:#fff;
+text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Back to Dhuan Detective</a>
+</div></body></html>"""
 
 
 @router.delete(

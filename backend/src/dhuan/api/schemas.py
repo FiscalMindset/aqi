@@ -16,3 +16,21 @@ class SubscriptionRequest(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     threshold_category: str = Field("Poor")
+
+
+class AlertPreviewRequest(BaseModel):
+    """Render the alert email for a point without sending anything."""
+
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    locality: str = Field(default="", max_length=120)
+    threshold_category: str = Field(default="Poor", max_length=32)
+    causes: list[str] = Field(default_factory=list, max_length=8)
+    advice: str | None = Field(default=None, max_length=400)
+    unsubscribe_token: str = Field(default="", max_length=64)
+
+
+class AlertPreviewResponse(BaseModel):
+    subject: str
+    body: str
+    html: str
