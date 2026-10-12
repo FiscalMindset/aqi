@@ -889,7 +889,6 @@
         SL[SkipLink]
         HD[Header - desktop + mobile nav]
         OB[OfflineBanner]
-        DB[DemoBanner - rule 1]
         FT[Footer - OSM/OpenAQ attribution]
     end
     subgraph Routes[Routes]
@@ -947,7 +946,6 @@
 <ul>
 <li>Same-origin <code>/v1</code> by default (matches CloudFront's <code>/v1/*</code> behaviour; CloudFront origin + vite proxy in dev).</li>
 <li><code>application/problem+json</code> → typed <code>ApiError</code> with title/status/correlation id.</li>
-<li><code>X-Dhuan-Demo</code> response header → shows the permanent demo banner.</li>
 <li>15s AbortController timeout on every request.</li>
 </ul>
 <h2 id="quality-gates">Quality gates<a class="headerlink" href="#quality-gates" title="Permanent link">¶</a></h2>

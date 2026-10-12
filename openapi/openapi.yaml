@@ -289,6 +289,18 @@
               "minimum": -180,
               "title": "Lon"
             }
+          },
+          {
+            "name": "explain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include the per-parameter contribution breakdown. Costs one extra batched model pass, so it is opt-in: the agent and the hot path do not need it.",
+              "default": false,
+              "title": "Explain"
+            },
+            "description": "Include the per-parameter contribution breakdown. Costs one extra batched model pass, so it is opt-in: the agent and the hot path do not need it."
           }
         ],
         "responses": {
@@ -384,7 +396,7 @@
         "tags": [
           "explain"
         ],
-        "summary": "Explain the air at a point: likely causes with visible evidence",
+        "summary": "Explain the air at a point with visible, cited evidence",
         "operationId": "explain_route_v1_explain_post",
         "requestBody": {
           "content": {
@@ -398,7 +410,7 @@
         },
         "responses": {
           "200": {
-            "description": "Attribution result, persona advice, tool-call trace.",
+            "description": "Attribution result, a citation-grounded explanation, persona advice, the retrieval trace, and any evidence gaps.",
             "content": {
               "application/json": {
                 "schema": {
@@ -520,6 +532,48 @@
         }
       }
     },
+    "/v1/subscriptions/unsubscribe": {
+      "get": {
+        "tags": [
+          "subscriptions"
+        ],
+        "summary": "One-click unsubscribe from an alert email link",
+        "description": "Unsubscribe by clicking the link at the bottom of an alert.\n\nA GET is deliberate: mail clients and webmail scanners follow links without\na session, and a confirmation click is already the user's intent.",
+        "operationId": "unsubscribe_by_token_v1_subscriptions_unsubscribe_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A confirmation page; nothing is emailed.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/subscriptions/{id}": {
       "delete": {
         "tags": [
@@ -563,10 +617,197 @@
           }
         }
       }
+    },
+    "/v1/model": {
+      "get": {
+        "tags": [
+          "model"
+        ],
+        "summary": "Model card: algorithm, held-out accuracy, training provenance",
+        "operationId": "model_card_v1_model_get",
+        "responses": {
+          "200": {
+            "description": "Everything needed to judge the estimate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCardOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/alerts/preview": {
+      "post": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Render the alert email for a point (no email is sent)",
+        "operationId": "preview_alert_v1_alerts_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Subject, plain-text body and responsive HTML.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/routes/compare": {
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Compare real road routes by estimated PM2.5 exposure",
+        "operationId": "compare_routes_v1_routes_compare_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteCompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Corridors ranked cleanest first, with a sampled profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteCompareResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AlertPreviewRequest": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon"
+          },
+          "locality": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Locality",
+            "default": ""
+          },
+          "threshold_category": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Threshold Category",
+            "default": "Poor"
+          },
+          "causes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Causes"
+          },
+          "advice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 400
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advice"
+          },
+          "unsubscribe_token": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Unsubscribe Token",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "AlertPreviewRequest",
+        "description": "Render the alert email for a point without sending anything."
+      },
+      "AlertPreviewResponse": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "html": {
+            "type": "string",
+            "title": "Html"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "body",
+          "html"
+        ],
+        "title": "AlertPreviewResponse"
+      },
       "Bbox": {
         "properties": {
           "min_lat": {
@@ -683,9 +924,40 @@
             "type": "string",
             "title": "Honesty"
           },
-          "demo_mode": {
-            "type": "boolean",
-            "title": "Demo Mode"
+          "persistence_anchor_ugm3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persistence Anchor Ugm3"
+          },
+          "model_adjustment_ugm3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Adjustment Ugm3"
+          },
+          "features_used": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureContribution"
+            },
+            "type": "array",
+            "title": "Features Used",
+            "default": []
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "default": "persistence-baseline"
           }
         },
         "type": "object",
@@ -702,8 +974,7 @@
           "model_version",
           "served_by",
           "cpcb_table_version",
-          "honesty",
-          "demo_mode"
+          "honesty"
         ],
         "title": "EstimateOut",
         "description": "PM2.5 estimate with an 80% interval and full honesty block."
@@ -729,6 +1000,45 @@
           "lon"
         ],
         "title": "ExplainRequest"
+      },
+      "FeatureContribution": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "reference": {
+            "type": "number",
+            "title": "Reference"
+          },
+          "contribution_ugm3": {
+            "type": "number",
+            "title": "Contribution Ugm3"
+          },
+          "absolute_effect_ugm3": {
+            "type": "number",
+            "title": "Absolute Effect Ugm3"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "unit",
+          "reference",
+          "contribution_ugm3",
+          "absolute_effect_ugm3"
+        ],
+        "title": "FeatureContribution",
+        "description": "How much one input parameter moved this particular estimate."
       },
       "FeedStatusOut": {
         "properties": {
@@ -811,19 +1121,160 @@
           "version": {
             "type": "string",
             "title": "Version"
-          },
-          "demo_mode": {
-            "type": "boolean",
-            "title": "Demo Mode"
           }
         },
         "type": "object",
         "required": [
           "status",
-          "version",
-          "demo_mode"
+          "version"
         ],
         "title": "HealthOut"
+      },
+      "ModelCardOut": {
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "title": "Algorithm"
+          },
+          "trained_at_utc": {
+            "type": "string",
+            "title": "Trained At Utc"
+          },
+          "snapshot_sha256": {
+            "type": "string",
+            "title": "Snapshot Sha256"
+          },
+          "n_rows": {
+            "type": "integer",
+            "title": "N Rows"
+          },
+          "stations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Stations"
+          },
+          "temporal_holdout": {
+            "$ref": "#/components/schemas/ModelMetrics"
+          },
+          "leave_one_station_out": {
+            "$ref": "#/components/schemas/ModelMetrics"
+          },
+          "baselines": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ModelMetrics"
+            },
+            "type": "object",
+            "title": "Baselines"
+          },
+          "winner": {
+            "type": "string",
+            "title": "Winner"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "n_features": {
+            "type": "integer",
+            "title": "N Features"
+          },
+          "conformal_radius_ugm3": {
+            "type": "number",
+            "title": "Conformal Radius Ugm3"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "algorithm",
+          "trained_at_utc",
+          "snapshot_sha256",
+          "n_rows",
+          "stations",
+          "temporal_holdout",
+          "leave_one_station_out",
+          "baselines",
+          "winner",
+          "features",
+          "n_features",
+          "conformal_radius_ugm3",
+          "notes"
+        ],
+        "title": "ModelCardOut",
+        "description": "Algorithm, accuracy and provenance \u2014 regenerated from metrics.json."
+      },
+      "ModelMetrics": {
+        "properties": {
+          "n_train": {
+            "type": "integer",
+            "title": "N Train"
+          },
+          "n_test": {
+            "type": "integer",
+            "title": "N Test"
+          },
+          "mae": {
+            "type": "number",
+            "title": "Mae"
+          },
+          "rmse": {
+            "type": "number",
+            "title": "Rmse"
+          },
+          "r2": {
+            "type": "number",
+            "title": "R2"
+          },
+          "bias": {
+            "type": "number",
+            "title": "Bias"
+          },
+          "coverage80": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage80"
+          },
+          "mean_width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Width"
+          }
+        },
+        "type": "object",
+        "required": [
+          "n_train",
+          "n_test",
+          "mae",
+          "rmse",
+          "r2",
+          "bias"
+        ],
+        "title": "ModelMetrics",
+        "description": "Held-out accuracy for one evaluation protocol."
       },
       "ReadyCheck": {
         "properties": {
@@ -864,19 +1315,267 @@
             },
             "type": "array",
             "title": "Checks"
-          },
-          "demo_mode": {
-            "type": "boolean",
-            "title": "Demo Mode"
           }
         },
         "type": "object",
         "required": [
           "status",
-          "checks",
-          "demo_mode"
+          "checks"
         ],
         "title": "ReadyOut"
+      },
+      "RouteCompareRequest": {
+        "properties": {
+          "from_lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "From Lat"
+          },
+          "from_lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "From Lon"
+          },
+          "to_lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "To Lat"
+          },
+          "to_lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "To Lon"
+          },
+          "max_samples": {
+            "type": "integer",
+            "maximum": 14.0,
+            "minimum": 3.0,
+            "title": "Max Samples",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_lat",
+          "from_lon",
+          "to_lat",
+          "to_lon"
+        ],
+        "title": "RouteCompareRequest"
+      },
+      "RouteCompareResponse": {
+        "properties": {
+          "origin": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Origin"
+          },
+          "destination": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Destination"
+          },
+          "router": {
+            "type": "string",
+            "title": "Router"
+          },
+          "corridor_count": {
+            "type": "integer",
+            "title": "Corridor Count"
+          },
+          "cleanest": {
+            "$ref": "#/components/schemas/RouteCorridor"
+          },
+          "worst": {
+            "$ref": "#/components/schemas/RouteCorridor"
+          },
+          "mean_pm25_saving": {
+            "type": "number",
+            "title": "Mean Pm25 Saving"
+          },
+          "samples_per_corridor": {
+            "type": "integer",
+            "title": "Samples Per Corridor"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "honesty_note": {
+            "type": "string",
+            "title": "Honesty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "origin",
+          "destination",
+          "router",
+          "corridor_count",
+          "cleanest",
+          "worst",
+          "mean_pm25_saving",
+          "samples_per_corridor",
+          "note",
+          "honesty_note"
+        ],
+        "title": "RouteCompareResponse"
+      },
+      "RouteCorridor": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "duration_min": {
+            "type": "number",
+            "title": "Duration Min"
+          },
+          "mean_pm25": {
+            "type": "number",
+            "title": "Mean Pm25"
+          },
+          "peak_pm25": {
+            "type": "number",
+            "title": "Peak Pm25"
+          },
+          "peak_at": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Peak At"
+          },
+          "dose_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dose Index"
+          },
+          "served_points": {
+            "type": "integer",
+            "title": "Served Points"
+          },
+          "geometry": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Geometry"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/RouteSample"
+            },
+            "type": "array",
+            "title": "Samples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "kind",
+          "distance_km",
+          "duration_min",
+          "mean_pm25",
+          "peak_pm25",
+          "peak_at",
+          "dose_index",
+          "served_points",
+          "geometry",
+          "samples"
+        ],
+        "title": "RouteCorridor",
+        "description": "One candidate way through, ranked cleanest first."
+      },
+      "RouteSample": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "pm25_mid": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pm25 Mid"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "data_age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Age Seconds"
+          },
+          "served_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Served By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon",
+          "pm25_mid",
+          "category"
+        ],
+        "title": "RouteSample",
+        "description": "One sampled point along a corridor."
       },
       "Settings": {
         "properties": {
@@ -890,11 +1589,6 @@
             ],
             "title": "Env",
             "default": "dev"
-          },
-          "demo_mode": {
-            "type": "boolean",
-            "title": "Demo Mode",
-            "default": false
           },
           "log_level": {
             "type": "string",
@@ -988,6 +1682,36 @@
             "title": "Bedrock Model Id",
             "default": ""
           },
+          "groq_api_key": {
+            "type": "string",
+            "title": "Groq Api Key",
+            "default": ""
+          },
+          "groq_model": {
+            "type": "string",
+            "title": "Groq Model",
+            "default": "openai/gpt-oss-120b"
+          },
+          "groq_base_url": {
+            "type": "string",
+            "title": "Groq Base Url",
+            "default": "https://api.groq.com/openai/v1"
+          },
+          "groq_enabled": {
+            "type": "boolean",
+            "title": "Groq Enabled",
+            "default": true
+          },
+          "groq_timeout_seconds": {
+            "type": "number",
+            "title": "Groq Timeout Seconds",
+            "default": 8.0
+          },
+          "groq_max_tokens": {
+            "type": "integer",
+            "title": "Groq Max Tokens",
+            "default": 3000
+          },
           "opensearch_endpoint": {
             "type": "string",
             "title": "Opensearch Endpoint",
@@ -1022,6 +1746,51 @@
             "type": "string",
             "title": "Sns Topic Arn",
             "default": ""
+          },
+          "smtp_host": {
+            "type": "string",
+            "title": "Smtp Host",
+            "default": ""
+          },
+          "smtp_port": {
+            "type": "integer",
+            "title": "Smtp Port",
+            "default": 587
+          },
+          "smtp_username": {
+            "type": "string",
+            "title": "Smtp Username",
+            "default": ""
+          },
+          "smtp_password": {
+            "type": "string",
+            "title": "Smtp Password",
+            "default": ""
+          },
+          "smtp_from": {
+            "type": "string",
+            "title": "Smtp From",
+            "default": ""
+          },
+          "osrm_base_url": {
+            "type": "string",
+            "title": "Osrm Base Url",
+            "default": "https://router.project-osrm.org"
+          },
+          "smtp_starttls": {
+            "type": "boolean",
+            "title": "Smtp Starttls",
+            "default": true
+          },
+          "public_web_url": {
+            "type": "string",
+            "title": "Public Web Url",
+            "default": ""
+          },
+          "alert_email_from_name": {
+            "type": "string",
+            "title": "Alert Email From Name",
+            "default": "Dhuan Detective"
           },
           "ssm_parameter_prefix": {
             "type": "string",
@@ -1059,10 +1828,10 @@
             "type": "array",
             "title": "Cors Origins"
           },
-          "demo_data_dir": {
+          "web_dir": {
             "type": "string",
-            "title": "Demo Data Dir",
-            "default": ""
+            "title": "Web Dir",
+            "default": "/var/task/web"
           }
         },
         "type": "object",
@@ -1299,10 +2068,6 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Coverage"
-          },
-          "demo_mode": {
-            "type": "boolean",
-            "title": "Demo Mode"
           }
         },
         "type": "object",
@@ -1311,8 +2076,7 @@
           "api_version",
           "model_version",
           "feeds",
-          "coverage",
-          "demo_mode"
+          "coverage"
         ],
         "title": "StatusOut"
       },

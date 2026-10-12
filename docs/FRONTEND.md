@@ -10,7 +10,6 @@ flowchart TB
         SL[SkipLink]
         HD[Header - desktop + mobile nav]
         OB[OfflineBanner]
-        DB[DemoBanner - rule 1]
         FT[Footer - OSM/OpenAQ attribution]
     end
     subgraph Routes[Routes]
@@ -71,7 +70,6 @@ flowchart TB
 
 - Same-origin `/v1` by default (matches CloudFront's `/v1/*` behaviour; CloudFront origin + vite proxy in dev).
 - `application/problem+json` → typed `ApiError` with title/status/correlation id.
-- `X-Dhuan-Demo` response header → shows the permanent demo banner.
 - 15s AbortController timeout on every request.
 
 ## Quality gates

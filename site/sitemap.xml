@@ -132,4 +132,12 @@
          <loc>https://fiscalmindset.github.io/aqi/adr/0008-demodata-banner/</loc>
          <lastmod>2026-10-12</lastmod>
     </url>
+    <url>
+         <loc>https://fiscalmindset.github.io/aqi/adr/0009-remove-demo-mode/</loc>
+         <lastmod>2026-10-12</lastmod>
+    </url>
+    <url>
+         <loc>https://fiscalmindset.github.io/aqi/adr/0010-grounded-explanation/</loc>
+         <lastmod>2026-10-12</lastmod>
+    </url>
 </urlset>

@@ -48,7 +48,6 @@ curl "http://localhost:8000/v1/estimate?lat=28.6139&lon=77.2090"
   "served_by": "nearest-station",
   "cpcb_table_version": "2014-11-24h-breaks",
   "honesty": "Estimate, not a measurement. ...",
-  "demo_mode": true
 }
 ```
 
@@ -89,7 +88,6 @@ curl -X POST "http://localhost:8000/v1/explain" \
   "advice": [
     {"persona": "parent", "headline": "Air is very poor (226 µg/m³): children should limit outdoor time", "actions": ["..."], "disclaimer": "General guidance for information only, not medical or legal advice."}
   ],
-  "demo_mode": true,
   "note": "This is an AI explanation with visible evidence. Claims are labelled 'likely'; verify with official CPCB stations."
 }
 ```

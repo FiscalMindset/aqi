@@ -63,5 +63,4 @@ Symptoms: `/v1/status` shows `ok=false`; estimates carry `stale=true` with large
 |---|---|
 | `/v1/estimate` 503 with "OpenAQ not configured" | set `OPENAQ_API_KEY` in SSM Parameter Store `/dhuan/openaq-api-key` |
 | Sources empty in UI | OpenSearch index missing → `make seed-sources` |
-| Demo banner absent in demo mode | `X-Dhuan-Demo` header blocked → CORS `expose_headers` (already set) |
 | Map blank | tiles blocked/offline → the map error state explains it; estimate still works |

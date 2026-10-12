@@ -9,4 +9,6 @@
 | [0005](0005-openapi-30-pin.md) | Pin the committed OpenAPI spec to 3.0.3 |
 | [0006](0006-coverage-threshold-84.md) | Coverage threshold 84 (measured 84.65%) |
 | [0007](0007-frontend-single-panel.md) | Exclusive rendering of mobile sheet vs desktop panel |
-| [0008](0008-demodata-banner.md) | Demo data via recorded snapshot + permanent banner |
+| [0008](0008-demodata-banner.md) | Demo data via recorded snapshot + permanent banner (superseded by 0009) |
+| [0009](0009-remove-demo-mode.md) | Remove demo mode; real credential-free feeds only |
+| [0010](0010-grounded-explanation.md) | Grounded explanation with no LLM; Groq as optional fluency pass only |

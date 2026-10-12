@@ -48,7 +48,7 @@ make verify                                  # all of them
 
 ## Code review checklist
 
-- [ ] Rule 1: nothing fake in `src`; demo data only via `DEMO_MODE` with the banner
+- [ ] Rule 1: nothing fake in `src`; no demo mode exists - every response is real data
 - [ ] Rule 2: full route checklist for any new route
 - [ ] Rule 3: fail soft, stale values labelled, nothing invented
 - [ ] Docs and diagrams updated for behaviour changes
