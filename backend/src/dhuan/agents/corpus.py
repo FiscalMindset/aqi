@@ -261,12 +261,12 @@ def build_passages(
         w: dict[str, Any] = weather
         speed: float | None = w.get("wind_speed_ms")
         gust: float | None = w.get("wind_gust_ms")
-        direction: float | None = w.get("wind_direction_deg")
+        wind_from: float | None = w.get("wind_direction_deg")
         parts: list[str] = []
         if speed is not None:
             parts.append(f"Wind is {float(speed):.1f} metres per second")
-        if direction is not None:
-            parts.append(f"from the {compass(float(direction))}")
+        if wind_from is not None:
+            parts.append(f"from the {compass(float(wind_from))}")
         if gust is not None:
             parts.append(f"with gusts to {float(gust):.1f}")
         if parts:
@@ -278,9 +278,9 @@ def build_passages(
                     facts={
                         "speed": speed,
                         "gust": gust,
-                        "direction": direction,
-                        "direction_label": (
-                            compass(float(direction)) if direction is not None else None
+                        "wind_from": wind_from,
+                        "wind_from_label": (
+                            compass(float(wind_from)) if wind_from is not None else None
                         ),
                     },
                     authority=0.8,
