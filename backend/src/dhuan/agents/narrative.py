@@ -61,6 +61,33 @@ class GroundedAnswer:
     def body(self) -> str:
         return " ".join(p.text for p in self.paragraphs)
 
+    def apply_prose(self, text: str, *, served_by: str) -> None:
+        """Adopt an optional rewrite of the prose.
+
+        Only the text surface changes. The passages, the paragraph-to-passage
+        citations and the retrieval trace are left exactly as composed, because
+        those are the audit trail and a fluency pass must never touch them.
+
+        The rewrite is stored as one paragraph that inherits the citations of
+        every paragraph it replaced, so `assert_grounded` still holds and the UI
+        can still show what the text was derived from.
+        """
+        stripped = text.strip()
+        if not stripped or stripped == self.body:
+            self.served_by = served_by
+            return
+        inherited = sorted({pid for p in self.paragraphs for pid in p.passage_ids})
+        self.paragraphs = [
+            Paragraph(
+                intent=self.paragraphs[0].intent if self.paragraphs else "explanation",
+                text=stripped,
+                passage_ids=inherited,
+            )
+        ]
+        self.served_by = served_by
+        # a rewrite may only reword; it must still be traceable
+        assert_grounded(self.paragraphs, self.passages)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "headline": self.headline,

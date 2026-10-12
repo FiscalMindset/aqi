@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     aws_region: str = "ap-south-1"
     aws_endpoint_url: str = ""  # LocalStack: http://localhost:4566
     bedrock_model_id: str = ""
+
+    # Groq is an OPTIONAL fluency pass over an already-grounded explanation.
+    # It never produces facts: the composer writes the text and the numbers
+    # first, and Groq may only reword it. With no key, or when the call fails,
+    # the explanation is served exactly as composed.
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_enabled: bool = True
+    groq_timeout_seconds: float = 8.0
+    groq_max_tokens: int = 700
     opensearch_endpoint: str = "http://localhost:9200"
     opensearch_index: str = "sources"
     dynamodb_table_estimates: str = "dhuan-estimates"

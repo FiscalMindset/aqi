@@ -8,6 +8,7 @@ from typing import Any
 from dhuan.agents.grounded import evidence_gaps, grounded_answer
 from dhuan.agents.guardrails import SYSTEM_PREAMBLE
 from dhuan.agents.narrative import GroundedAnswer
+from dhuan.agents.rewrite import rewrite_explanation
 from dhuan.agents.runtime import AttributionAgent, BedrockBackend, ScriptedBackend
 from dhuan.agents.schemas import PersonaAdvice
 from dhuan.agents.tools import default_registry
@@ -203,9 +204,19 @@ async def explain_full(
     grounded = grounded_answer(
         evidence_items=evidence_items,
         estimate=estimate_obj,
-        query=(estimate_obj.served_by and "explain the air here and what is causing it"),
+        query="explain the air here and what is causing it",
         model_accuracy=accuracy,
     )
+    # Optional fluency pass. The composed text is already complete and cited;
+    # if Groq is unset, slow, rate-limited or tries to invent a number we keep
+    # the composed text untouched.
+    text, prose_served_by = await rewrite_explanation(
+        headline=grounded.headline,
+        body=grounded.body,
+        passages=[p.to_dict() for p in grounded.passages],
+        settings=s,
+    )
+    grounded.apply_prose(text, served_by=prose_served_by)
     record("AgentRuns", 1)
     if result.confidence == "low":
         record("AgentLowConfidence", 1)
