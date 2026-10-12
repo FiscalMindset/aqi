@@ -69,7 +69,9 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_enabled: bool = True
     groq_timeout_seconds: float = 8.0
-    groq_max_tokens: int = 700
+    # Reasoning models (gpt-oss) spend part of this budget on reasoning before
+    # emitting any prose, so it has to be generous or we get a null content.
+    groq_max_tokens: int = 3000
     opensearch_endpoint: str = "http://localhost:9200"
     opensearch_index: str = "sources"
     dynamodb_table_estimates: str = "dhuan-estimates"

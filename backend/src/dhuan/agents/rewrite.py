@@ -161,10 +161,25 @@ async def _call_groq(
         choices = payload.get("choices") or []
         if not choices:
             raise ValueError("groq returned no choices")
-        message = choices[0].get("message") or {}
+        choice = choices[0]
+        message = choice.get("message") or {}
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
-            raise ValueError("groq returned empty content")
+            # A reasoning model can spend the whole token budget reasoning and
+            # return no prose. Retrying with a larger budget fixes it; if it
+            # still comes back empty the caller keeps the composed text.
+            finish = str(choice.get("finish_reason") or "")
+            has_reasoning = bool(message.get("reasoning"))
+            if finish == "length" and has_reasoning and max_tokens < 8000:
+                return await _call_groq(
+                    user=user,
+                    api_key=api_key,
+                    base_url=base_url,
+                    model=model,
+                    request_timeout=request_timeout,
+                    max_tokens=max_tokens * 3,
+                )
+            raise ValueError(f"groq returned empty content (finish_reason={finish!r})")
         return content
     finally:
         await client.aclose()

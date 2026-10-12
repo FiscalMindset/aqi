@@ -37,6 +37,10 @@ async def explain_route(
         "lat": body.lat,
         "lon": body.lon,
         "served_by": bundle.served_by,
+        # the prose layer is reported separately: the structured attribution can
+        # come from Bedrock while the explanation stays composed, and the user
+        # (and we) can see exactly which path produced each
+        "prose_served_by": bundle.prose_served_by,
         "attribution": bundle.result.model_dump(),
         # the headline and body are the user-facing answer; every paragraph
         # carries the passage ids it came from so the UI can show its workings

@@ -156,6 +156,11 @@ class ExplainBundle:
     evidence_items: list[dict[str, Any]]
     gaps: list[str]
 
+    @property
+    def prose_served_by(self) -> str:
+        """Which layer produced the prose: the composer alone, or Groq on top."""
+        return self.grounded.served_by
+
 
 async def explain_full(
     lat: float, lon: float, settings: Settings | None = None
