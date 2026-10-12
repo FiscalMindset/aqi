@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    # Public OSRM demo server (no key). Not for production SLAs; the route
+    # comparison fails soft with a labelled straight-line corridor if it is down.
+    osrm_base_url: str = "https://router.project-osrm.org"
     smtp_starttls: bool = True
     # Public base URL of the web app, used for links inside alert emails.
     public_web_url: str = ""

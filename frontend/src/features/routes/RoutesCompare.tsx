@@ -1,76 +1,286 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { EstimatePanel } from "../explorer/EstimatePanel";
-import { useEstimate } from "../../hooks/useApi";
-import { allPlaces } from "../../lib/places";
+import { useRouteCompare } from "../../hooks/useApi";
+import { allPlaces, type Place } from "../../lib/places";
+import type { RouteCorridor } from "../../lib/api";
+import { RouteMap } from "./RouteMap";
+
+/** CPCB band colour, same scale the rest of the app uses. */
+function bandColour(pm25: number): string {
+  if (pm25 <= 30) return "#1a9850";
+  if (pm25 <= 60) return "#91cf60";
+  if (pm25 <= 90) return "#fee08b";
+  if (pm25 <= 120) return "#fc8d59";
+  if (pm25 <= 250) return "#d73027";
+  return "#7f0000";
+}
+
+function PlaceSelect({
+  label,
+  value,
+  onChange,
+  testId,
+}: {
+  label: string;
+  value: Place;
+  onChange: (p: Place) => void;
+  testId: string;
+}): React.JSX.Element {
+  return (
+    <label className="flex-1 text-xs text-slate-400">
+      {label}
+      <select
+        data-testid={testId}
+        className="mt-1 w-full rounded-lg border border-white/10 bg-slate-800 p-2.5 text-sm text-slate-100 min-h-touch"
+        value={`${value.lat},${value.lon}`}
+        onChange={(e) => {
+          const [lat, lon] = e.target.value.split(",").map(Number);
+          const hit = allPlaces().find((p) => p.lat === lat && p.lon === lon);
+          if (hit) onChange(hit);
+        }}
+      >
+        {allPlaces().map((p) => (
+          <option key={`${p.name}-${p.lat}`} value={`${p.lat},${p.lon}`}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function CorridorCard({
+  corridor,
+  isCleanest,
+  saving,
+}: {
+  corridor: RouteCorridor;
+  isCleanest: boolean;
+  saving: number | null;
+}): React.JSX.Element {
+  return (
+    <article
+      data-testid={`corridor-${corridor.rank}`}
+      className={`rounded-xl border p-4 ${
+        isCleanest
+          ? "border-emerald-500/50 bg-emerald-500/5"
+          : "border-white/10 bg-slate-900/50"
+      }`}
+    >
+      <header className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+          <span
+            className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-bold ${
+              isCleanest ? "bg-emerald-500 text-night-900" : "bg-slate-700 text-slate-200"
+            }`}
+          >
+            {corridor.rank}
+          </span>
+          {isCleanest ? "Cleanest right now" : "Alternative"}
+          {corridor.kind === "straight-line" && (
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">
+              not a real road
+            </span>
+          )}
+        </h3>
+        {saving !== null && saving > 0 && (
+          <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
+            −{saving.toFixed(1)} µg/m³
+          </span>
+        )}
+      </header>
+
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Average" value={corridor.mean_pm25.toFixed(0)} unit="µg/m³" colour={bandColour(corridor.mean_pm25)} />
+        <Stat label="Worst point" value={corridor.peak_pm25.toFixed(0)} unit="µg/m³" colour={bandColour(corridor.peak_pm25)} />
+        <Stat label="Distance" value={corridor.distance_km.toFixed(1)} unit="km" />
+        <Stat label="Driving" value={corridor.duration_min.toFixed(0)} unit="min" />
+      </div>
+
+      {corridor.dose_index !== null && (
+        <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
+          Exposure index {corridor.dose_index.toFixed(0)} = average concentration ×
+          time in the vehicle. A cleaner but much longer drive can still be the
+          worse choice.
+        </p>
+      )}
+
+      <div>
+        <p className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">
+          PM2.5 along the way
+        </p>
+        <div className="flex h-8 items-end gap-[2px]" data-testid={`profile-${corridor.rank}`}>
+          {corridor.samples.map((s, i) => {
+            const v = s.pm25_mid ?? 0;
+            return (
+              <div
+                key={`${s.lat}-${s.lon}-${i}`}
+                title={`${v.toFixed(0)} µg/m³ · ${s.category ?? "n/a"}`}
+                className="flex-1 rounded-t"
+                style={{
+                  height: `${Math.max(8, Math.min(100, (v / 350) * 100))}%`,
+                  background: bandColour(v),
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  unit,
+  colour,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  colour?: string;
+}): React.JSX.Element {
+  return (
+    <div className="rounded-lg bg-slate-800/60 px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-0.5 font-mono text-base" style={{ color: colour ?? "#e2e8f0" }}>
+        {value}
+        <span className="ml-0.5 text-[10px] text-slate-500">{unit}</span>
+      </div>
+    </div>
+  );
+}
 
 /**
- * Route comparison: samples points along candidate routes and ranks by
- * estimated exposure (concentration x time). Without Location Service
- * credentials, straight-line alternative corridors are compared instead and
- * the UI says so.
+ * "Which way should I go?" - the product's fourth pillar.
+ *
+ * Routes come from the real road network, PM2.5 is our own estimate sampled
+ * along each one, and the ranking is by exposure, not by the router's
+ * shortest-first order: the whole point is that the quick way is not always the
+ * clean way.
  */
-export function RoutesCompare() {
+export function RoutesCompare(): React.JSX.Element {
   const { t } = useTranslation();
-  const [from, setFrom] = useState(28.6139);
-  const [fromLon, setFromLon] = useState(77.209);
-  const [to, setTo] = useState(28.7146);
-  const [toLon, setToLon] = useState(77.1025);
+  const places = useMemo(() => allPlaces(), []);
+  const [from, setFrom] = useState<Place>(places.find((p) => p.name === "Connaught Place") ?? places[0]!);
+  const [to, setTo] = useState<Place>(places.find((p) => p.name === "Rohini") ?? places[1]!);
+  const [swapped, setSwapped] = useState(false);
 
-  const midpoint = {
-    lat: (from + to) / 2,
-    lon: (fromLon + toLon) / 2,
-  };
-  const estimate = useEstimate(midpoint.lat, midpoint.lon);
+  // These objects go into the React Query key, so they must be referentially
+  // stable: fresh object literals on every render make the key change, which
+  // makes the query refetch forever. Each refetch costs a routing + profiling
+  // round trip, so the screen never settles.
+  const fromEndpoint = useMemo(
+    () => ({ lat: from.lat, lon: from.lon, name: from.name }),
+    [from],
+  );
+  const toEndpoint = useMemo(() => ({ lat: to.lat, lon: to.lon, name: to.name }), [to]);
+  const result = useRouteCompare(fromEndpoint, toEndpoint);
+
+  function swap(): void {
+    setFrom(to);
+    setTo(from);
+    setSwapped((v) => !v);
+  }
+
+  const corridors: RouteCorridor[] = useMemo(() => {
+    if (!result.data) return [];
+    // the API ranks them; re-order the two it returns for the list
+    return [result.data.cleanest, result.data.worst].filter(
+      (c, i, arr) => arr.findIndex((x) => x.rank === c.rank) === i,
+    );
+  }, [result.data]);
 
   return (
-    <div className="max-w-3xl mx-auto p-4 space-y-4">
-      <h1 className="text-xl font-bold">{t("routes.title")}</h1>
-      <div className="grid grid-cols-2 gap-2">
-        {(["from", "to"] as const).map((endpoint, i) => (
-          <label key={endpoint} className="text-sm">
-            {t(`routes.${endpoint}`)}
-            <select
-              className="mt-1 w-full bg-white/10 rounded p-2 min-h-touch"
-              value={i === 0 ? `${from},${fromLon}` : `${to},${toLon}`}
-              onChange={(e) => {
-                const [lat, lon] = e.target.value.split(",").map(Number);
-                if (i === 0 && lat != null && lon != null) {
-                  setFrom(lat);
-                  setFromLon(lon);
-                } else if (lat != null && lon != null) {
-                  setTo(lat);
-                  setToLon(lon);
-                }
-              }}
-            >
-              {allPlaces().map((p) => (
-                <option key={p.name} value={`${p.lat},${p.lon}`}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </div>
-      <p className="text-xs text-slate-400">
-        Comparing two corridors by estimated exposure at the midpoint
-        (concentration × time). Route polylines need Amazon Location Service
-        credentials; the corridor comparison works without them.
-      </p>
-      <div className="grid md:grid-cols-2 gap-3">
-        <article className="rounded bg-white/5 p-3" data-testid="route-direct">
-          <h2 className="font-semibold text-sm">{t("routes.direct" as never)}</h2>
-          <EstimatePanel estimate={estimate.data} loading={estimate.isPending} error={estimate.error} compact />
-        </article>
-        <article className="rounded bg-white/5 p-3" data-testid="route-alt">
-          <h2 className="font-semibold text-sm">{t("routes.cleanest")}</h2>
-          <p className="text-sm text-slate-400">
-            Pick the lower-exposure corridor by comparing the midpoint estimate
-            with points along the way.
+    <div className="mx-auto max-w-6xl p-4">
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">{t("routes.title")}</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-400">
+            Real roads, our own PM2.5 estimate sampled along each one. Ranked by
+            exposure, not by distance.
           </p>
-        </article>
+        </div>
+        <button
+          type="button"
+          onClick={swap}
+          data-testid="swap-endpoints"
+          className="rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-slate-200 min-h-touch hover:bg-slate-700"
+        >
+          Swap start and end
+        </button>
+      </header>
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <PlaceSelect label="From" value={from} onChange={setFrom} testId="route-from" />
+        <PlaceSelect label="To" value={to} onChange={setTo} testId="route-to" />
       </div>
+
+      {result.isPending && (
+        <div
+          data-testid="routes-loading"
+          className="rounded-xl border border-white/10 bg-slate-900/50 p-8 text-center text-sm text-slate-400"
+        >
+          Finding real routes and estimating the air along them…
+        </div>
+      )}
+
+      {result.error != null && (
+        <div
+          role="alert"
+          data-testid="routes-error"
+          className="rounded-xl border border-red-500/40 bg-red-950/40 p-4 text-sm text-red-300"
+        >
+          {result.error instanceof Error ? result.error.message : "Route comparison failed."}
+        </div>
+      )}
+
+      {result.data && (
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+          <div className="order-2 lg:order-1 min-h-[22rem]">
+            <RouteMap
+              corridors={corridors}
+              origin={result.data.origin}
+              destination={result.data.destination}
+            />
+          </div>
+
+          <div className="order-1 space-y-3 lg:order-2">
+            <p
+              data-testid="routes-summary"
+              className="rounded-xl border border-white/10 bg-slate-900/50 p-3 text-sm text-slate-300"
+            >
+              <strong className="text-slate-100">
+                {from.name} → {to.name}
+              </strong>
+              : {result.data.corridor_count} real{" "}
+              {result.data.corridor_count === 1 ? "route" : "routes"}.
+              {result.data.mean_pm25_saving > 0
+                ? ` Taking the cleaner one avoids an average of ${result.data.mean_pm25_saving.toFixed(1)} µg/m³.`
+                : " They are within noise of each other."}
+              {swapped ? null : null}
+            </p>
+
+            {corridors.map((c) => (
+              <CorridorCard
+                key={c.rank}
+                corridor={c}
+                isCleanest={c.rank === 1}
+                saving={
+                  c.rank === 1
+                    ? result.data!.worst.mean_pm25 - result.data!.cleanest.mean_pm25
+                    : null
+                }
+              />
+            ))}
+
+            <p className="rounded-xl border border-white/10 bg-slate-900/40 p-3 text-[11px] leading-relaxed text-slate-400">
+              {result.data.note} {result.data.honesty_note}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

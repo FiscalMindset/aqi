@@ -109,6 +109,42 @@ export interface ModelCard {
   notes: string[];
 }
 
+export interface RouteSample {
+  lat: number;
+  lon: number;
+  pm25_mid: number | null;
+  category: string | null;
+  data_age_seconds: number | null;
+  served_by: string | null;
+}
+
+export interface RouteCorridor {
+  rank: number;
+  kind: "road" | "straight-line";
+  distance_km: number;
+  duration_min: number;
+  mean_pm25: number;
+  peak_pm25: number;
+  peak_at: { lat: number; lon: number };
+  dose_index: number | null;
+  served_points: number;
+  geometry: [number, number][];
+  samples: RouteSample[];
+}
+
+export interface RouteComparison {
+  origin: { lat: number; lon: number };
+  destination: { lat: number; lon: number };
+  router: string;
+  corridor_count: number;
+  cleanest: RouteCorridor;
+  worst: RouteCorridor;
+  mean_pm25_saving: number;
+  samples_per_corridor: number;
+  note: string;
+  honesty_note: string;
+}
+
 export interface SourceHit {
   osm_id: string;
   type: string;
@@ -253,6 +289,24 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lat, lon }),
+    }),
+  compareRoutes: (body: {
+    fromLat: number;
+    fromLon: number;
+    toLat: number;
+    toLon: number;
+    maxSamples?: number;
+  }) =>
+    request<RouteComparison>("/routes/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_lat: body.fromLat,
+        from_lon: body.fromLon,
+        to_lat: body.toLat,
+        to_lon: body.toLon,
+        max_samples: body.maxSamples ?? 10,
+      }),
     }),
   model: () => request<ModelCard>("/model"),
   validation: () => request<ValidationMetrics>("/validation"),

@@ -25,7 +25,8 @@ def _load_handler_module() -> Any:
     """Import backend/lambda_handler.py, which lives outside the package."""
     if str(SRC) not in sys.path:
         sys.path.insert(0, str(SRC))
-    spec = importlib.util.spec_from_file_location("dhuan_lambda_handler", ROOT / "lambda_handler.py")
+    spec = importlib.util.spec_from_file_location("dhuan_lambda_handler",
+        ROOT / "lambda_handler.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -45,7 +46,7 @@ def test_mangum_adapter_is_called_not_dot_handler(
     calls: list[tuple[dict, object]] = []
 
     class FakeMangum:
-        def __init__(self, app: object, lifespan: str = "auto") -> None:  # noqa: ARG002
+        def __init__(self, app: object, lifespan: str = "auto") -> None:
             self.app = app
 
         def __call__(self, event: dict, context: object) -> dict:
@@ -74,7 +75,7 @@ def test_pipeline_env_routes_to_task_handler(
     monkeypatch.setenv("CMD", "pipeline")
     seen: list[dict] = []
 
-    def fake_pipeline(event: dict, context: object) -> dict:  # noqa: ARG001
+    def fake_pipeline(event: dict, context: object) -> dict:
         seen.append(event)
         return {"statusCode": 200, "body": '{"task":"ingest_stations"}'}
 
@@ -107,5 +108,5 @@ def test_api_env_does_not_use_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
             module.handler({}, SimpleNamespace())
         except AssertionError as exc:  # pragma: no cover - failure path
             pytest.fail(str(exc))
-        except Exception:  # noqa: BLE001 - Mangum will fail on the empty event
+        except Exception:
             pass

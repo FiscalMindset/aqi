@@ -27,6 +27,7 @@ from dhuan.api.routers import (
     grid,
     health,
     model_card,
+    routes,
     sources,
     stations,
     status,
@@ -131,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(subscriptions.router)
     app.include_router(model_card.router)
     app.include_router(alert_preview.router)
+    app.include_router(routes.router)
 
     # ------------------------------------------------------------------ SPA --
     # The built web app is served by the same Lambda that serves the API, so

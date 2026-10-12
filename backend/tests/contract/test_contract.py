@@ -50,8 +50,10 @@ def test_api_contract(case: schemathesis.Case, client: TestClient) -> None:
         return
     # typed, spec-compliant failures are allowed; unhandled 5xx are not
     if response.status_code >= 500:
-        assert response.status_code == 503, f"unhandled 5xx on {case.operation}: {response.text[:200]}"
-        assert response.headers.get("content-type", "").startswith("application/problem+json")
+        detail = f"unhandled 5xx on {case.operation}: {response.text[:200]}"
+        assert response.status_code == 503, detail
+        ctype = response.headers.get("content-type", "")
+        assert ctype.startswith("application/problem+json")
         return
     if response.status_code in (400, 404, 422):
         assert response.headers.get("content-type", "").startswith("application/problem+json")

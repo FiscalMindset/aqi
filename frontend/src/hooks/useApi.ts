@@ -4,6 +4,7 @@ import {
   type Estimate,
   type ExplainResponse,
   type ModelCard,
+  type RouteComparison,
   type SourcesResponse,
   type StationReading,
   type StatusResponse,
@@ -57,6 +58,26 @@ export function useExplain(
     enabled,
     staleTime: 5 * 60 * 1000,
     retry: 1,
+  });
+}
+
+export function useRouteCompare(
+  from: { lat: number; lon: number; name: string } | null,
+  to: { lat: number; lon: number; name: string } | null,
+): UseQueryResult<RouteComparison, Error> {
+  return useQuery({
+    queryKey: ["route-compare", from, to],
+    queryFn: () =>
+      api.compareRoutes({
+        fromLat: from!.lat,
+        fromLon: from!.lon,
+        toLat: to!.lat,
+        toLon: to!.lon,
+        maxSamples: 10,
+      }),
+    enabled: Boolean(from && to),
+    // routing + exposure profiling is expensive; a route does not change by the second
+    staleTime: 5 * 60 * 1000,
   });
 }
 

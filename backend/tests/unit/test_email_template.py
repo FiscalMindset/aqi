@@ -15,10 +15,10 @@ import pytest
 
 from dhuan.alerts.email_template import (
     CATEGORY_COLOURS,
+    _age_phrase,
     compose_html_email,
     station_link,
 )
-from dhuan.alerts.email_template import _age_phrase
 
 BASE = {
     "locality": "Rohini",
@@ -86,7 +86,8 @@ class TestTheme:
         assert "border:1px solid #223052" in html
 
     @pytest.mark.parametrize(
-        "hex_code", ["#1a9850", "#91cf60", "#fee08b", "#fc8d59", "#d73027", "#7f0000"]
+        "hex_code",
+        ["#1a9850", "#91cf60", "#fee08b", "#fc8d59", "#d73027", "#7f0000"],
     )
     def test_uses_the_cpcb_scale_not_tailwind_defaults(self, html: str, hex_code: str) -> None:
         assert hex_code in html
@@ -131,7 +132,8 @@ class TestResponsive:
 
     def test_small_screens_shrink_the_page_gutter(self, html: str) -> None:
         # a 311px card plus 2x12px padding overflowed a 320px screen
-        assert re.search(r"@media[^{]*max-width:480px[^}]*\{\s*[^}]*\.page\{[^}]*padding-left", html, re.S)
+        gutter = r"@media[^{]*max-width:480px[^}]*\{\s*[^}]*\.page\{[^}]*padding-left"
+        assert re.search(gutter, html, re.S)
 
     def test_keeps_600px_base_with_a_fluid_max(self, html: str) -> None:
         assert 'class="wrap card" width="600"' in html

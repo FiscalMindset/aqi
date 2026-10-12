@@ -9,6 +9,14 @@ Single source of truth for what is in flight. Structural history lives in `TASKS
 
 ## Remaining backlog
 
+- [ ] Live OpenAQ API key (register at account.openaq.org) -> flip DemoMode=false
+      in staging; the app currently serves recorded archive data with a banner
+- [ ] Bedrock model access on account 609394381612 (currently "Operation not
+      allowed"); the agent uses the deterministic backend and says so
+- [ ] CloudFront + CodeDeploy activation on the account (both rejected as
+      unverified); the API Lambda serves the web app instead
+- [ ] `sam deploy` once `aws login` succeeds
+
 - [ ] `infra/dashboards/` CloudWatch dashboard as code (alarms exist in the template)
 - [ ] Live agent evals gated behind `DHUAN_LIVE_AGENTS=1` (code path exists)
 - [ ] `docs/API.md` Swagger-UI embedding (the page documents routes + examples; the
@@ -16,6 +24,13 @@ Single source of truth for what is in flight. Structural history lives in `TASKS
 
 ## Done (recent)
 
+- [x] **Cleanest route is real, not a stub**: OSRM road network, PM2.5 sampled
+      along each corridor with the same estimator, ranked by exposure (mean,
+      peak, and dose = mean x time) rather than by distance. The longer route
+      frequently wins. `POST /v1/routes/compare`, `/v1/routes/compare` wired to a
+      map + ranked cards + per-corridor PM2.5 profile.
+- [x] **Product goals written down** in docs/index.md: four pillars, the rules
+      the product holds itself to, and where every input comes from
 - [x] **aws_journey.md** — the real credential story (login refresh `expiresIn`,
       HOME isolation, `boto3.DEFAULT_SESSION` reset), cfn-lint findings fixed,
       and the deployment runbook for when credentials exist
