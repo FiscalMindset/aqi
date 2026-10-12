@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
+from dhuan.agents.grounded import evidence_gaps, grounded_answer
 from dhuan.agents.guardrails import SYSTEM_PREAMBLE
+from dhuan.agents.narrative import GroundedAnswer
 from dhuan.agents.runtime import AttributionAgent, BedrockBackend, ScriptedBackend
 from dhuan.agents.schemas import PersonaAdvice
 from dhuan.agents.tools import default_registry
@@ -15,6 +18,7 @@ from dhuan.core.logging import get_logger
 from dhuan.core.metrics import record
 from dhuan.core.units import Point
 from dhuan.geo.boundary import point_in_ncr
+from dhuan.model.accuracy import model_accuracy_summary
 from dhuan.model.cpcb import category_for_pm25
 
 logger = get_logger("agents.explain")
@@ -140,10 +144,27 @@ def advice_for_attribution(
     ]
 
 
-async def explain(
+@dataclass(slots=True)
+class ExplainBundle:
+    """Everything one /v1/explain run produced, from a single evidence set."""
+
+    result: Any
+    advice: list[PersonaAdvice]
+    served_by: str
+    grounded: GroundedAnswer
+    evidence_items: list[dict[str, Any]]
+    gaps: list[str]
+
+
+async def explain_full(
     lat: float, lon: float, settings: Settings | None = None
-) -> tuple[Any, list[PersonaAdvice], str]:
-    """Run attribution + advisory for a point; returns (result, advice, served_by)."""
+) -> ExplainBundle:
+    """Attribution + grounded narrative + advice + evidence, all from one run.
+
+    The grounded narrative is composed from the exact evidence the agent
+    collected, so the cited explanation and the structured attribution can never
+    disagree. This is the LLM-free path; it does not require Bedrock.
+    """
     s = settings or get_settings()
     point = Point(lat=lat, lon=lon)
     if not point_in_ncr(point):
@@ -153,11 +174,9 @@ async def explain(
     try:
         result = await agent.run(lat, lon, system=f"{SYSTEM_PREAMBLE}\n\n{ATTRIBUTION_SYSTEM}")
     except Exception as exc:
-        # The backend can fail at call time, not just at construction: an
-        # account without Bedrock model access builds BedrockBackend fine
-        # (the model id is just a string) and only fails on InvokeModel with
-        # AccessDenied. Serving a deterministic explanation with the same tools
-        # and the same evidence rules is honest; returning a 500 is not.
+        # Bedrock can fail at call time, not just at construction (an account
+        # without model access builds fine, only InvokeModel fails). Fall back
+        # to the deterministic explanation rather than a 500.
         if served_by == "scripted-deterministic":
             raise
         logger.warning("bedrock_run_failed_falling_back: %s", exc)
@@ -165,6 +184,7 @@ async def explain(
         agent = AttributionAgent(default_registry(), ScriptedBackend())
         served_by = "scripted-deterministic"
         result = await agent.run(lat, lon, system=f"{SYSTEM_PREAMBLE}\n\n{ATTRIBUTION_SYSTEM}")
+
     estimate_obj = await estimate_route(lat, lon, s)
     estimate = {
         "pm25_mid": estimate_obj.pm25_mid,
@@ -177,16 +197,42 @@ async def explain(
         "demo_mode": estimate_obj.demo_mode,
     }
     advice = advice_for_attribution(result, estimate)
+
+    evidence_items = agent.registry.evidence_items()
+    accuracy = model_accuracy_summary()
+    grounded = grounded_answer(
+        evidence_items=evidence_items,
+        estimate=estimate_obj,
+        query=(estimate_obj.served_by and "explain the air here and what is causing it"),
+        model_accuracy=accuracy,
+    )
     record("AgentRuns", 1)
     if result.confidence == "low":
         record("AgentLowConfidence", 1)
-    return result, advice, served_by
+    return ExplainBundle(
+        result=result,
+        advice=advice,
+        served_by=served_by,
+        grounded=grounded,
+        evidence_items=evidence_items,
+        gaps=evidence_gaps(evidence_items),
+    )
+
+
+async def explain(
+    lat: float, lon: float, settings: Settings | None = None
+) -> tuple[Any, list[PersonaAdvice], str]:
+    """Back-compat wrapper returning just (result, advice, served_by)."""
+    bundle = await explain_full(lat, lon, settings)
+    return bundle.result, bundle.advice, bundle.served_by
 
 
 __all__ = [
     "ADVISORY_SYSTEM",
     "ATTRIBUTION_SYSTEM",
+    "ExplainBundle",
     "advice_for_attribution",
     "build_agent",
     "explain",
+    "explain_full",
 ]
