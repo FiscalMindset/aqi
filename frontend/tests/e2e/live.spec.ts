@@ -10,7 +10,7 @@ import { test, expect } from "@playwright/test";
  * was healthy at /staging/v1.
  */
 
-const LIVE = "http://127.0.0.1:4173/staging/";
+const LIVE = "https://vz7mjma8sj.execute-api.ap-south-1.amazonaws.com/staging/";
 
 test.describe("deployed app", () => {
   test("loads the estimate, the explanation and the map", async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe("deployed app", () => {
     await expect(page.getByTestId("estimate-value")).toBeVisible({ timeout: 45_000 });
 
     // The explanation is no longer behind a click.
-    await expect(page.getByTestId("explanation-headline")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("explanation-headline")).toBeVisible({ timeout: 90_000 });
 
     // The map must have real height, not a zero-height canvas.
     const box = await page.getByTestId("map").boundingBox();
@@ -63,7 +63,7 @@ test.describe("deployed app", () => {
       await d.dismiss();
     });
     await page.getByTestId("use-location").click();
-    await expect(page.getByTestId("location-note")).toBeVisible();
+    await expect(page.getByTestId("location-note")).toBeVisible({ timeout: 10_000 });
     expect(alerted).toBe(false);
   });
 });
