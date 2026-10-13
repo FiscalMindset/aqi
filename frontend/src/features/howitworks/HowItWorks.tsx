@@ -10,7 +10,7 @@ const STEP_COUNT = 4;
 export function HowItWorks() {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
-  const explain = useExplain(DELHI.lat, DELHI.lon, true);
+  const explain = useExplain(DELHI.lat, DELHI.lon);
   const evidence = explain.data?.attribution.evidence ?? [];
 
   return (

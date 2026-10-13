@@ -958,6 +958,16 @@
             "type": "string",
             "title": "Method",
             "default": "persistence-baseline"
+          },
+          "weather": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeatherOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1832,6 +1842,11 @@
             "type": "string",
             "title": "Web Dir",
             "default": "/var/task/web"
+          },
+          "web_base_path": {
+            "type": "string",
+            "title": "Web Base Path",
+            "default": ""
           }
         },
         "type": "object",
@@ -2218,6 +2233,128 @@
         ],
         "title": "ValidationOut",
         "description": "Metrics exactly as produced by model/evaluate.py."
+      },
+      "WeatherOut": {
+        "properties": {
+          "wind_speed_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Speed Ms"
+          },
+          "wind_gust_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Gust Ms"
+          },
+          "wind_from_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind From Deg"
+          },
+          "wind_from_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind From Label"
+          },
+          "temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature C"
+          },
+          "relative_humidity_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relative Humidity Pct"
+          },
+          "precipitation_mm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precipitation Mm"
+          },
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale",
+            "default": false
+          },
+          "ventilation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ventilation"
+          },
+          "ventilation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ventilation Reason"
+          }
+        },
+        "type": "object",
+        "title": "WeatherOut",
+        "description": "Current conditions at the point, with the derived ventilation verdict."
       }
     }
   }

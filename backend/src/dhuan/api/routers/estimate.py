@@ -12,12 +12,13 @@ Behaviour (decided in docs/adr/0007-model-serving.md):
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
+from dhuan.agents.corpus import _ventilation, compass
 from dhuan.api.errors import outside_coverage_problem, upstream_problem
-from dhuan.api.models import EstimateOut, FeatureContribution
+from dhuan.api.models import EstimateOut, FeatureContribution, WeatherOut
 from dhuan.api.services import nearest_reading, stations_near, weather_now
 from dhuan.core.config import Settings, get_settings
 from dhuan.core.metrics import record
@@ -36,6 +37,32 @@ from dhuan.model.predict import (
 )
 
 router = APIRouter(prefix="/v1", tags=["estimate"])
+
+
+def _weather_out(weather: Any, outcome: Any) -> WeatherOut | None:
+    """Turn the weather observation into the block the UI renders.
+
+    The ventilation verdict is derived from wind, so it is labelled as derived
+    and carries the reason: "poor, the air is nearly still" is far more useful
+    to someone deciding whether to go for a walk than a bare number.
+    """
+    if weather is None:
+        return None
+    speed = weather.wind_speed_ms
+    verdict, reason = _ventilation(speed, weather.wind_gusts_ms)
+    return WeatherOut(
+        wind_speed_ms=round(speed, 2),
+        wind_gust_ms=round(weather.wind_gusts_ms, 2) if weather.wind_gusts_ms else None,
+        wind_from_deg=round(weather.wind_direction_deg, 1),
+        wind_from_label=compass(weather.wind_direction_deg),
+        temperature_c=round(weather.temperature_c, 1),
+        relative_humidity_pct=round(weather.relative_humidity_pct, 0),
+        precipitation_mm=round(weather.precipitation_mm, 1),
+        age_seconds=round(outcome.age_seconds, 0),
+        stale=outcome.stale,
+        ventilation=verdict,
+        ventilation_reason=reason,
+    )
 
 HONESTY_NOTE = (
     "Estimate, not a measurement. The interval is the model's calibrated 80% "
@@ -172,6 +199,7 @@ async def compute_estimate(
         persistence_anchor_ugm3=round(anchor_value, 1) if anchor_value is not None else None,
         model_adjustment_ugm3=round(model_adjustment, 1) if model_adjustment is not None else None,
         features_used=features_used,
+        weather=_weather_out(weather, wx),
         method=(
             "gradient-boosted-trees on persistence-anchored residual"
             if served_by == "model"

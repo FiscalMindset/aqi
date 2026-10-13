@@ -79,6 +79,11 @@ Globals:
     Environment:
       Variables:
         ENV: !Ref Environment
+        # Must match VITE_BASE_PATH the bundle was built with. The bundle
+        # requests its assets, manifest and service worker relative to this
+        # prefix; when the API did not strip it, /staging/sw.js resolved to no
+        # file and the service worker never registered.
+        WEB_BASE_PATH: !Sub "/${Environment}"
         LOG_LEVEL: INFO
         BEDROCK_MODEL_ID: !Ref BedrockModelId
         OPENSEARCH_ENDPOINT: !Ref OpensearchEndpoint

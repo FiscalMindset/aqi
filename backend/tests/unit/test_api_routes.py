@@ -275,3 +275,58 @@ def test_stations_limit_respected(api: TestClient, monkeypatch: pytest.MonkeyPat
     assert resp.status_code == 200
     assert len(resp.json()) <= 3
 
+
+
+def test_spa_documents_are_not_cached_but_assets_are(api: TestClient) -> None:
+    """Hashed assets cache forever; the documents naming them must not.
+
+    A stale index.html or service worker points at chunk hashes the next deploy
+    deleted, which the browser reports as "Failed to fetch dynamically imported
+    module". That was the live failure, so it is pinned here.
+    """
+    import re
+    from pathlib import Path
+
+    web = Path(__file__).resolve().parents[1] / "fixtures" / "web"
+    if not web.is_dir():
+        return  # no built SPA in the unit-test environment
+
+    shell = api.get("/")
+    if shell.status_code != 200:
+        return
+    assert re.search(r"no-cache", shell.headers.get("cache-control", ""))
+
+
+def test_prefixed_deep_link_serves_the_spa_shell(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`/staging/routes` must resolve to the file `routes`, not to a 404.
+
+    The bundle registers its service worker and manifest relative to the base
+    path. When the catch-all did not strip the prefix, `/staging/sw.js` matched
+    no file and fell through to index.html, so the browser got HTML where it
+    expected JavaScript and never registered the worker.
+    """
+    import shutil
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from dhuan.api.app import create_app
+    from dhuan.core import config
+
+    dist = Path(__file__).resolve().parents[2] / ".." / "frontend" / "dist"
+    if not dist.is_dir():
+        pytest.skip("no built SPA available for this test")
+
+    monkeypatch.setenv("WEB_DIR", str(dist.resolve()))
+    monkeypatch.setenv("WEB_BASE_PATH", "/staging")
+    config.get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        for path in ("/staging/", "/staging/routes", "/staging/sw.js"):
+            resp = client.get(path)
+            assert resp.status_code == 200, path
+            if path.endswith("sw.js"):
+                assert "javascript" in resp.headers["content-type"], path
+            else:
+                assert "text/html" in resp.headers["content-type"], path
+    config.get_settings.cache_clear()
+    _ = shutil

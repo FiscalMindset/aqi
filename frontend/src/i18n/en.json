@@ -30,7 +30,7 @@
     "dataAge": "Data age",
     "modelVersion": "Model version",
     "servedBy": "Produced by",
-    "honesty": "Estimate, not a measurement.",
+    "honesty": "What this number means",
     "stale": "Stale data (serving last good values)",
     "minutesAgo": "{{count}} min ago",
     "hoursAgo": "{{count}} h ago",

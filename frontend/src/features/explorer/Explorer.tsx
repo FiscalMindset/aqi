@@ -10,6 +10,7 @@ import { CausesPanel } from "./CausesPanel";
 import { PersonaCards } from "./PersonaCards";
 import { AgentTrace } from "./AgentTrace";
 import { ExplanationPanel } from "./ExplanationPanel";
+import { WindPanel } from "./WindPanel";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
   useEstimate,
@@ -39,12 +40,16 @@ export function Explorer() {
     }
     return DELHI;
   });
-  const [showTrace, setShowTrace] = useState(false);
+  // The explanation is the product, not a debug view: it loads with the
+  // estimate and is shown by default. The toggle now collapses the supporting
+  // detail (agent trace, causes, persona advice) for people who want just the
+  // number.
+  const [showDetail, setShowDetail] = useState(false);
 
   const estimate = useEstimate(point.lat, point.lon);
   const stations = useStations(point.lat, point.lon);
   const sources = useSources(point.lat, point.lon);
-  const explain = useExplain(point.lat, point.lon, showTrace);
+  const explain = useExplain(point.lat, point.lon);
   const modelCard = useModelCard();
 
   function selectPlace(lat: number, lon: number) {
@@ -55,6 +60,7 @@ export function Explorer() {
   const panel = (
     <div className="space-y-4">
       <EstimatePanel estimate={estimate.data} loading={estimate.isPending} error={estimate.error} />
+      {estimate.data?.weather && <WindPanel weather={estimate.data.weather} />}
       {estimate.data && (
         <FeatureBreakdown
           features={estimate.data.features_used}
@@ -63,16 +69,18 @@ export function Explorer() {
           finalValue={estimate.data.pm25_mid}
         />
       )}
-      <button
-        type="button"
-        data-testid="explain-toggle"
-        aria-expanded={showTrace}
-        onClick={() => setShowTrace((v) => !v)}
-        className="w-full min-h-touch rounded bg-teal-700 hover:bg-teal-600 text-white font-semibold"
-      >
-        {showTrace ? "Hide the explanation" : "Why is the air bad here?"}
-      </button>
-      {showTrace && explain.data && (
+      {explain.isPending && (
+        <p className="text-sm text-muted" role="status" data-testid="explain-loading">
+          Working out what is causing this…
+        </p>
+      )}
+      {explain.isError && (
+        <p className="text-sm text-amber-300" role="alert" data-testid="explain-error">
+          The explanation could not be produced. The estimate above is still
+          valid.
+        </p>
+      )}
+      {explain.data && (
         <ExplanationPanel
           headline={explain.data.headline}
           paragraphs={explain.data.paragraphs}
@@ -81,9 +89,18 @@ export function Explorer() {
           servedBy={explain.data.prose_served_by}
         />
       )}
-      {showTrace && <AgentTrace explain={explain} />}
-      {showTrace && explain.data && <CausesPanel attribution={explain.data.attribution} />}
-      {showTrace && explain.data && <PersonaCards advice={explain.data.advice} />}
+      <button
+        type="button"
+        data-testid="explain-toggle"
+        aria-expanded={showDetail}
+        onClick={() => setShowDetail((v) => !v)}
+        className="w-full min-h-touch rounded border border-line px-3 py-2 text-sm font-semibold"
+      >
+        {showDetail ? "Hide the supporting detail" : "Show the supporting detail"}
+      </button>
+      {showDetail && <AgentTrace explain={explain} />}
+      {showDetail && explain.data && <CausesPanel attribution={explain.data.attribution} />}
+      {showDetail && explain.data && <PersonaCards advice={explain.data.advice} />}
       <ModelCardPanel card={modelCard.data ?? null} />
       <p className="text-xs text-slate-400">
         Nearest official station:{" "}
@@ -96,7 +113,14 @@ export function Explorer() {
 
   return (
     <div className="relative h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-3.5rem)] flex flex-col md:flex-row">
-      <div className="absolute inset-0 min-h-[45dvh] md:relative md:min-h-0 md:flex-1 md:order-1">
+      {/* The map wrapper must have a resolvable height on every breakpoint.
+          `absolute inset-0` gives the div a definite box only when the nearest
+          positioned ancestor does; combined with `min-h-[45dvh]` on the same
+          element, `h-full` inside it resolved against an auto height and the
+          canvas collapsed to zero. On mobile the map now owns 45dvh outright,
+          and on desktop it is a flex child with `min-h-0` so it cannot grow
+          past the row. */}
+      <div className="relative h-[45dvh] shrink-0 md:relative md:h-auto md:min-h-0 md:flex-1 md:order-1">
         <SourceMap
           lat={point.lat}
           lon={point.lon}

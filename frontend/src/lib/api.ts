@@ -46,6 +46,21 @@ export interface StationReading {
   category: string | null;
 }
 
+export interface Weather {
+  wind_speed_ms: number | null;
+  wind_gust_ms: number | null;
+  wind_from_deg: number | null;
+  wind_from_label: string | null;
+  temperature_c: number | null;
+  relative_humidity_pct: number | null;
+  precipitation_mm: number | null;
+  age_seconds: number | null;
+  stale: boolean;
+  /** Derived from wind speed, never a measurement. */
+  ventilation: string | null;
+  ventilation_reason: string | null;
+}
+
 export interface Estimate {
   lat: number;
   lon: number;
@@ -70,6 +85,8 @@ export interface Estimate {
   method: string;
   /** Per-parameter effect on this particular estimate, in ug/m3. */
   features_used: FeatureContribution[];
+  /** Current conditions at this point; null only if the weather feed failed. */
+  weather: Weather | null;
 }
 
 export interface FeatureContribution {

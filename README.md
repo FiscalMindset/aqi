@@ -4,6 +4,16 @@
 
 Dhuan Detective estimates street-level PM2.5 for any point in Delhi-NCR, finds the likely pollution sources upwind, explains the causes with visible evidence from an AI agent, and gives tailored advice for parents, delivery riders and outdoor workers.
 
+## Live app
+
+**https://vz7mjma8sj.execute-api.ap-south-1.amazonaws.com/staging/**
+
+Deployed on AWS (ap-south-1) from the `main` branch. Try it: pick a point on the
+map, read the estimate with its 80% interval, then read the cited explanation
+and open any paragraph's evidence. No API key is needed to use it — station
+readings come from the OpenAQ public archive and pollution sources from a
+bundled OpenStreetMap extract.
+
 [![CI](https://github.com/FiscalMindset/aqi/actions/workflows/ci.yml/badge.svg)](https://github.com/FiscalMindset/aqi/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)

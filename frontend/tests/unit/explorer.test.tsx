@@ -68,6 +68,19 @@ const estimate = {
   persistence_anchor_ugm3: 226,
   model_adjustment_ugm3: -2.6,
   method: "gradient-boosted-trees on persistence-anchored residual",
+  weather: {
+    wind_speed_ms: 2.5,
+    wind_gust_ms: 4.0,
+    wind_from_deg: 292,
+    wind_from_label: "west-northwest",
+    temperature_c: 18,
+    relative_humidity_pct: 62,
+    precipitation_mm: 0,
+    age_seconds: 1800,
+    stale: false,
+    ventilation: "moderate",
+    ventilation_reason: "there is light wind, so pollution disperses only slowly",
+  },
   features_used: [
     {
       name: "station_lag24",

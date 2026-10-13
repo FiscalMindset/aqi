@@ -55,20 +55,50 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await aclose_clients()
 
 
-def _mount_spa(app: FastAPI, web_dir: Path) -> None:
-    """Serve the built SPA with a catch-all fallback to index.html."""
+def _mount_spa(app: FastAPI, web_dir: Path, base_path: str = "") -> None:
+    """Serve the built SPA with a catch-all fallback to index.html.
+
+    `base_path` is the prefix the app is served under (`/staging` in AWS). The
+    built bundle requests its assets, its service worker and its manifest
+    relative to that prefix, so the catch-all has to strip it before looking
+    for a file on disk. Without this, `/staging/sw.js` resolved to no file and
+    fell through to index.html: the browser got HTML where it expected
+    JavaScript, the service worker never registered, and the precache from an
+    older deploy kept serving references to chunk hashes that no longer exist -
+    which surfaced as "Failed to fetch dynamically imported module".
+    """
     from fastapi.staticfiles import StaticFiles  # noqa: PLC0415
 
+    prefix = base_path.strip("/")
     assets = web_dir / "assets"
     if assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+        app.mount(f"/{prefix}/assets" if prefix else "/assets",
+                  StaticFiles(directory=assets), name="assets")
 
     index = web_dir / "index.html"
     root = web_dir.resolve()
 
-    @app.get("/", include_in_schema=False, response_model=None)
-    async def spa_root() -> FileResponse:
-        return FileResponse(index)
+    # Hashed filenames change whenever the bundle changes, so they are safe to
+    # cache forever. index.html and the service worker must not be: they are the
+    # documents that *reference* those hashes, and a stale copy points at
+    # assets that were deleted by the next deploy.
+    immutable_headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+    revalidate_headers = {"Cache-Control": "no-cache, must-revalidate"}
+
+    def _serve(candidate: Path) -> FileResponse:
+        in_assets = candidate.parent.name == "assets"
+        return FileResponse(
+            candidate,
+            headers=immutable_headers if in_assets else revalidate_headers,
+        )
+
+    if prefix:
+        root_path = f"/{prefix}"
+
+        @app.get(root_path, include_in_schema=False, response_model=None)
+        @app.get(f"{root_path}/", include_in_schema=False, response_model=None)
+        async def spa_prefixed_root() -> FileResponse:
+            return _serve(index)
 
     # response_model=None: a union of Starlette response classes is not a valid
     # Pydantic field, and FastAPI raises FastAPIError at import time otherwise.
@@ -85,10 +115,16 @@ def _mount_spa(app: FastAPI, web_dir: Path) -> None:
                     "status": 404,
                 },
             )
-        candidate = (root / full_path).resolve()
+        # strip the deployment prefix so `/staging/sw.js` looks for `sw.js`
+        relative = (
+            full_path[len(prefix) + 1:]
+            if prefix and full_path.startswith(prefix)
+            else full_path
+        )
+        candidate = (root / relative).resolve()
         if candidate.is_file() and candidate.is_relative_to(root):
-            return FileResponse(candidate)
-        return FileResponse(index)
+            return _serve(candidate)
+        return _serve(index)
 
 
 logger = logging.getLogger(__name__)
@@ -142,7 +178,7 @@ def create_app() -> FastAPI:
     # every network. Both showed up as React's "Unexpected Application Error!
     # 404 Not Found" for every deep link.
     if settings.web_dir and Path(settings.web_dir).is_dir():
-        _mount_spa(app, Path(settings.web_dir))
+        _mount_spa(app, Path(settings.web_dir), settings.web_base_path)
     else:
         logger.info("web_dir not set or missing; API only (no SPA)")
 

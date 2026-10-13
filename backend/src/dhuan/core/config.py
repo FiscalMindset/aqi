@@ -115,6 +115,10 @@ class Settings(BaseSettings):
 
     # Built web app served by the API Lambda (single public URL).
     web_dir: str = "/var/task/web"
+    # Prefix the app is served under. Must match VITE_BASE_PATH used to build
+    # it, or the bundle's asset, manifest and service-worker requests resolve
+    # against the wrong path.
+    web_base_path: str = ""
 
     @field_validator("sms_enabled", mode="before")
     @classmethod

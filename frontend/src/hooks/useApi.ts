@@ -2,7 +2,6 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import {
   api,
   type Estimate,
-  type ExplainResponse,
   type ModelCard,
   type RouteComparison,
   type SourcesResponse,
@@ -47,17 +46,16 @@ export function useSources(
   });
 }
 
-export function useExplain(
-  lat: number,
-  lon: number,
-  enabled: boolean,
-): UseQueryResult<ExplainResponse, Error> {
+/**
+ * Always fetches. The explanation is the product, not a debug view, so it loads
+ * with the estimate rather than behind a click; the caller decides only whether
+ * to show the supporting detail.
+ */
+export function useExplain(lat: number, lon: number) {
   return useQuery({
     queryKey: ["explain", lat, lon],
     queryFn: () => api.explain(lat, lon),
-    enabled,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
+    staleTime: 5 * 60_000,
   });
 }
 

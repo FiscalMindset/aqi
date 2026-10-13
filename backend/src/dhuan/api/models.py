@@ -103,6 +103,30 @@ class EstimateOut(BaseModel):
     model_adjustment_ugm3: float | None = None
     features_used: list[FeatureContribution] = []
     method: str = "persistence-baseline"
+    # What the air is doing right now. The estimate alone does not tell a user
+    # *why* this point differs from the one they came from: wind decides which
+    # sources are upstream, and speed decides whether pollution disperses at
+    # all. Surfacing it here means the UI can explain the number without
+    # a second round trip.
+    weather: WeatherOut | None = None
+
+
+class WeatherOut(BaseModel):
+    """Current conditions at the point, with the derived ventilation verdict."""
+
+    wind_speed_ms: float | None = None
+    wind_gust_ms: float | None = None
+    wind_from_deg: float | None = None
+    wind_from_label: str | None = None
+    temperature_c: float | None = None
+    relative_humidity_pct: float | None = None
+    precipitation_mm: float | None = None
+    age_seconds: float | None = None
+    stale: bool = False
+    # "good" | "moderate" | "poor": how well the air can flush itself here.
+    # Derived from wind speed and gusts, never presented as a measurement.
+    ventilation: str | None = None
+    ventilation_reason: str | None = None
 
 
 class ModelMetrics(BaseModel):
