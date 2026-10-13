@@ -116,6 +116,8 @@ def _mount_spa(app: FastAPI, web_dir: Path, base_path: str = "") -> None:
                 },
             )
         # strip the deployment prefix so `/staging/sw.js` looks for `sw.js`
+        # version.json is served by the SPA static mount, never cached, so the
+        # running bundle can prove whether it is the current build.
         relative = (
             full_path[len(prefix) + 1:]
             if prefix and full_path.startswith(prefix)

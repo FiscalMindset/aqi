@@ -15,6 +15,14 @@ const apiPrefix = `${base.replace(/\/$/, "")}/v1`;
 
 export default defineConfig({
   base,
+  // Stamped into the bundle at build time and compared against the version.json
+  // the server publishes, so a browser holding an old service worker can detect
+  // that it is running old code and clear itself.
+  define: {
+    "import.meta.env.VITE_BUILD_ID": JSON.stringify(
+      process.env.BUILD_ID ?? process.env.GIT_COMMIT ?? `build-${Date.now()}`,
+    ),
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -31,14 +39,25 @@ export default defineConfig({
         theme_color: "#0f766e",
         background_color: "#0b1020",
         display: "standalone",
-        start_url: "/",
+        // Absolute paths here resolve to the domain root, not to the base the
+        // app is served from. Installed on /staging/ they pointed at /
+        // index.html, which the gateway does not serve.
+        start_url: base,
+        scope: base,
         icons: [
-          { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: `${base}icon-192.png`, sizes: "192x192", type: "image/png" },
+          { src: `${base}icon-512.png`, sizes: "512x512", type: "image/png" },
         ],
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // The precached shell is only the safety net for a genuine offline
+        // start. Serving index.html from cache-first kept returning the version
+        // from a previous deploy, whose chunk hashes no longer exist, so the
+        // app booted into a bundle that then failed every API call. Network
+        // first for navigation: online users always get the current shell.
+        navigateFallback: base,
+        navigateFallbackDenylist: [/^\/v1\//, /\.json$/],
         // the map chunk is loaded on demand, never precached (keeps the shell small)
         globIgnores: ["**/maplibre-*.js", "**/maplibre-*.css"],
         // app shell is precached; the last API result is cached by the query layer
