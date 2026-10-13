@@ -15,8 +15,19 @@ cd "${ROOT}/frontend"
 BASE_PATH="${VITE_BASE_PATH:-/}"
 BUILD_ID="${BUILD_ID:-$(git rev-parse --short HEAD 2>/dev/null || echo "local-$(date +%s)")}"
 
+if [ "${BASE_PATH}" = "/" ] && [ "${REQUIRE_BASE:-0}" != "1" ]; then
+  echo "    (no VITE_BASE_PATH set: assets will be referenced from / - correct for"
+  echo "     root-served deploys, wrong when the app lives under a stage path)"
+fi
+
 echo "==> building web app (base=${BASE_PATH}, build=${BUILD_ID})"
-VITE_BASE_PATH="${BASE_PATH}" BUILD_ID="${BUILD_ID}" npm run build
+# Type-check and bundle separately so a failing type-check cannot be mistaken
+# for a bundling problem, and so the bundle always sees BASE_PATH.
+echo "==> type-checking"
+npx tsc --noEmit
+
+echo "==> bundling"
+VITE_BASE_PATH="${BASE_PATH}" BUILD_ID="${BUILD_ID}" npx vite build
 
 mkdir -p dist
 printf '{"build":"%s"}\n' "${BUILD_ID}" > dist/version.json

@@ -89,7 +89,8 @@
     "success": "Check your inbox: alerts start after confirmation.",
     "idempotent": "You are already subscribed to this locality.",
     "unsubscribe": "Unsubscribe",
-    "outsideError": "Alerts are available for Delhi-NCR only."
+    "outsideError": "Alerts are available for Delhi-NCR only.",
+    "place": "Monitor this point"
   },
   "how": {
     "title": "How Dhuan Detective works",
@@ -98,7 +99,8 @@
     "prev": "Back",
     "of": "of",
     "start": "Start the walkthrough",
-    "restart": "Restart"
+    "restart": "Restart",
+    "back": "Back"
   },
   "methodology": {
     "title": "Methodology and honest limits",

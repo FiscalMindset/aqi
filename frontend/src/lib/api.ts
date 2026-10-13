@@ -325,15 +325,20 @@ export interface StatusResponse {
   coverage: CoverageBlock;
 }
 
-async function requestAt<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestAt<T>(
+  path: string,
+  init?: RequestInit,
+  options: { tolerateStatuses?: number[] } = {},
+): Promise<T> {
   const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-  return request<T>(path, init, base);
+  return request<T>(path, init, base, options);
 }
 
 async function request<T>(
   path: string,
   init?: RequestInit,
   base: string = API_BASE,
+  options: { tolerateStatuses?: number[] } = {},
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
@@ -341,7 +346,7 @@ async function request<T>(
     const res = await fetch(`${base}${path}`, { ...init, signal: controller.signal });
     if (res.status === 204) return undefined as T;
     const contentType = res.headers.get("content-type") ?? "";
-    if (!res.ok) {
+    if (!res.ok && !(options.tolerateStatuses ?? []).includes(res.status)) {
       if (contentType.includes("application/problem+json")) {
         const problem = (await res.json()) as Problem;
         throw new ApiError(problem, res.status);
@@ -360,8 +365,11 @@ async function request<T>(
 export const api = {
   /** Dependency probes: what the estimate actually needs, not just liveness. */
   // /ready lives at the site root, not under /v1, so it must not go through
-  // API_BASE.
-  ready: () => requestAt<ReadyResponse>("/ready"),
+  // API_BASE. It answers 503 when a dependency is degraded, which is a valid,
+  // informative answer rather than a transport failure - so this one request
+  // deliberately does not throw on 5xx, or a degraded system would blank the
+  // very page that reports it.
+  ready: () => requestAt<ReadyResponse>("/ready", undefined, { tolerateStatuses: [503] }),
   /** Render the real alert email for a point without sending it. */
   previewAlert: (body: {
     lat: number;

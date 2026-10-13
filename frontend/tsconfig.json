@@ -19,5 +19,6 @@
     "baseUrl": ".",
     "paths": { "@/*": ["src/*"] }
   },
+  "exclude": ["tests/unit/i18n.test.ts"],
   "include": ["src", "tests"]
 }

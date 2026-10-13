@@ -194,8 +194,9 @@ export function Methodology() {
             a source being upwind is an association, not a proven cause.
           </li>
           <li>
-            Inside the New York refinery fire plume the model is untested and
-            should not be trusted.
+            During a large biomass-burning episode the chemistry shifts and
+            sensors can saturate; our model has no fire-specific term and its
+            interval is not calibrated for that case.
           </li>
           <li>
             Weather feeds and satellite fire detection degrade gracefully: when
