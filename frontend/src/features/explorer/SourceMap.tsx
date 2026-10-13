@@ -29,6 +29,7 @@ export function SourceMap({
   const mapRef = useRef<MlMap | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useIdleCallback(() => {
     void (async () => {
@@ -76,6 +77,8 @@ export function SourceMap({
         console.warn("map error", e.error?.message ?? "unknown");
       });
       mapRef.current = map;
+      map.once("load", () => setReady(true));
+      if (map.loaded()) setReady(true);
     }
   }
 
@@ -92,7 +95,12 @@ export function SourceMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    // Waiting for isStyleLoaded() looked safer but was the bug: sources
+    // routinely arrive before the raster style finished loading, the effect
+    // bailed out, and nothing redrew them afterwards because its deps never
+    // changed again. The map showed a street grid with zero source markers.
+    // `ready` flips when the style loads and re-runs this effect.
+    if (!map || !ready) return;
     const geojson = {
       type: "FeatureCollection" as const,
       features: sources.map((s) => ({
@@ -134,7 +142,7 @@ export function SourceMap({
         paint: { "text-color": "#fde68a", "text-halo-color": "#111827", "text-halo-width": 1 },
       });
     }
-  }, [sources]);
+  }, [sources, ready]);
 
   useEffect(() => {
     return () => {

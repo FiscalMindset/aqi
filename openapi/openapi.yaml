@@ -1401,6 +1401,14 @@
             "type": "integer",
             "title": "Corridor Count"
           },
+          "corridors": {
+            "items": {
+              "$ref": "#/components/schemas/RouteCorridor"
+            },
+            "type": "array",
+            "title": "Corridors",
+            "default": []
+          },
           "cleanest": {
             "$ref": "#/components/schemas/RouteCorridor"
           },

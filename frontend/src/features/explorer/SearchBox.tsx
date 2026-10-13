@@ -9,6 +9,7 @@ export function SearchBox({
 }) {
   const { t } = useTranslation();
   const [q, setQ] = useState("");
+  const [locationNote, setLocationNote] = useState<string | null>(null);
   const results = searchPlaces(q);
 
   return (
@@ -56,15 +57,32 @@ export function SearchBox({
         data-testid="use-location"
         className="mt-2 w-full min-h-touch rounded bg-white/10 text-sm"
         onClick={() => {
-          if (!navigator.geolocation) return;
+          if (!navigator.geolocation) {
+            setLocationNote(t("explorer.locationUnavailable"));
+            return;
+          }
+          setLocationNote(null);
           navigator.geolocation.getCurrentPosition(
             (pos) => onSelect(pos.coords.latitude, pos.coords.longitude),
-            () => alert(t("explorer.locationDenied")),
+            () =>
+              // Not a modal alert: geolocation is optional and most people
+              // decline it. Search still works, so this is an inline note.
+              setLocationNote(t("explorer.locationDenied")),
+            { timeout: 8000 },
           );
         }}
       >
         {t("explorer.useLocation")}
       </button>
+      {locationNote && (
+        <p
+          role="status"
+          data-testid="location-note"
+          className="mt-1 text-xs text-amber-200"
+        >
+          {locationNote}
+        </p>
+      )}
     </div>
   );
 }

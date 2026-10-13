@@ -76,6 +76,9 @@ class RouteCompareResponse(BaseModel):
     destination: dict[str, float]
     router: str
     corridor_count: int
+    # Every ranked corridor, cleanest first. A response carrying only
+    # cleanest+worst cannot show a ranking, which is the whole feature.
+    corridors: list[RouteCorridor] = []
     cleanest: RouteCorridor
     worst: RouteCorridor
     mean_pm25_saving: float

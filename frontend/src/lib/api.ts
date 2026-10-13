@@ -7,12 +7,22 @@
  */
 
 /**
- * Same-origin `/v1` by default: the web app is served behind CloudFront,
- * which routes `/v1/*` to the API origin (see infra/template.yaml). `vite
- * dev` proxies `/v1` to the local backend (vite.config.ts).
+ * The API lives under the same prefix the app is served from.
+ *
+ * A hardcoded "/v1" looks harmless because it is same-origin, but on AWS the
+ * app is mounted at `/staging/`, so `/v1/estimate` resolves to the gateway
+ * root, which serves no API and returns 403. Every request failed with
+ * "Could not load the estimate" while the backend was perfectly healthy at
+ * `/staging/v1/estimate`.
+ *
+ * BASE_PATH comes from Vite's `base` option, which the Dockerfile sets from
+ * the same build arg as VITE_BASE_PATH, so the two cannot drift.
  */
+const BASE_PATH = import.meta.env.BASE_URL ?? "/";
+
 export const API_BASE =
-  (import.meta.env.VITE_API_BASE as string | undefined) ?? "/v1";
+  (import.meta.env.VITE_API_BASE as string | undefined) ??
+  `${BASE_PATH.replace(/\/$/, "")}/v1`;
 
 export interface Problem {
   type: string;
@@ -153,6 +163,8 @@ export interface RouteComparison {
   destination: { lat: number; lon: number };
   router: string;
   corridor_count: number;
+  /** Every corridor, cleanest first. */
+  corridors: RouteCorridor[];
   cleanest: RouteCorridor;
   worst: RouteCorridor;
   mean_pm25_saving: number;

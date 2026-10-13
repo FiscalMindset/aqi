@@ -25,6 +25,14 @@ export function RouteMap({
 }): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  // maplibre is dynamically imported, so the map object arrives some time after
+  // the first render. The corridors usually land BEFORE that, and the draw
+  // effect bailed out with `!map` - and since its deps did not change again,
+  // it never redrew. Nothing was ever drawn: no route lines, no endpoint dots,
+  // only the legend promising them. `ready` makes the effect re-run when the
+  // map finally exists.
+  const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -56,12 +64,32 @@ export function RouteMap({
         map.addControl(new maplibregl.NavigationControl(), "top-right");
         map.on("error", () => setFailed(true));
         mapRef.current = map;
+        map.once("load", () => setReady(true));
+        if (map.loaded()) setReady(true);
+
+        // This map mounts inside a grid cell that has not finished laying out,
+        // so MapLibre measured the container at its pre-layout width and the
+        // canvas kept that size for good: a ~180 px sliver of tiles inside a
+        // ~560 px column, with the navigation controls stranded far to the
+        // right. Watching the container and calling resize() is the fix.
+        const live = map;
+        const el = container.current;
+        if (el) {
+          const observer = new ResizeObserver(() => {
+            live.resize();
+            live.triggerRepaint();
+          });
+          observer.observe(el);
+          observerRef.current = observer;
+        }
       } catch {
         setFailed(true);
       }
     })();
     return () => {
       disposed = true;
+      observerRef.current?.disconnect();
+      observerRef.current = null;
       map?.remove();
       mapRef.current = null;
     };
@@ -84,6 +112,8 @@ export function RouteMap({
       ],
       { padding: 48, duration: 0 },
     );
+    map.resize();
+    map.triggerRepaint();
 
     for (const id of ["corridors", "endpoints"]) {
       if (map.getLayer(id)) map.removeLayer(id);
@@ -147,7 +177,7 @@ export function RouteMap({
         "circle-stroke-width": 2,
       },
     });
-  }, [corridors, origin, destination]);
+  }, [corridors, origin, destination, ready]);
 
   return (
     <div className={`relative h-full w-full overflow-hidden rounded-xl ${className}`}>

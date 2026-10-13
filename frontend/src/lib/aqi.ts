@@ -26,21 +26,29 @@ export function onColor(category: string): string {
   return "#1f2937";
 }
 
+/**
+ * Icons accompany colour (WCAG: never colour alone).
+ *
+ * The previous glyphs were pie wedges (◉ ◔ ◑ ◕) filling up with pollution. Two
+ * of them - ◔ and ◕ - read as a loading spinner at a glance, which is the last
+ * thing an air-quality reading should look like. These are a severity ramp that
+ * cannot be mistaken for a progress indicator: ring, square, triangle, filled
+ * square, filled diamond, filled octagon.
+ */
 export function categoryIcon(category: string): string {
-  // icons accompany color (WCAG: never color alone)
   switch (category) {
     case "Good":
-      return "◉";
+      return "○";
     case "Satisfactory":
-      return "◔";
+      return "□";
     case "Moderately Polluted":
-      return "◑";
+      return "△";
     case "Poor":
-      return "◕";
+      return "■";
     case "Very Poor":
-      return "⬤";
+      return "◆";
     case "Severe":
-      return "▲";
+      return "✖";
     default:
       return "?";
   }

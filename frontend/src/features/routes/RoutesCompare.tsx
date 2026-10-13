@@ -58,6 +58,14 @@ function CorridorCard({
   isCleanest: boolean;
   saving: number | null;
 }): React.JSX.Element {
+  // Scale the bars to this corridor's own worst sample so the profile shape is
+  // readable instead of squashed under a fixed 350 µg/m³ ceiling that most
+  // Delhi days never reach.
+  const axisCeiling = Math.max(
+    60,
+    Math.ceil(Math.max(corridor.peak_pm25, ...corridor.samples.map((x) => x.pm25_mid ?? 0)) / 20) * 20,
+  );
+
   return (
     <article
       data-testid={`corridor-${corridor.rank}`}
@@ -106,24 +114,39 @@ function CorridorCard({
       )}
 
       <div>
-        <p className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">
-          PM2.5 along the way
-        </p>
-        <div className="flex h-8 items-end gap-[2px]" data-testid={`profile-${corridor.rank}`}>
+        <div className="mb-1 flex items-baseline justify-between">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">
+            PM2.5 along the way
+          </p>
+          <p className="text-[10px] text-slate-500" data-testid={`axis-${corridor.rank}`}>
+            {axisCeiling.toFixed(0)} µg/m³ scale
+          </p>
+        </div>
+        <div
+          className="flex h-10 items-end gap-[2px]"
+          role="img"
+          aria-label={`PM2.5 profile along corridor ${corridor.rank}: mean ${corridor.mean_pm25.toFixed(0)}, peak ${corridor.peak_pm25.toFixed(0)} micrograms per cubic metre`}
+          data-testid={`profile-${corridor.rank}`}
+        >
           {corridor.samples.map((s, i) => {
             const v = s.pm25_mid ?? 0;
+            const pct = Math.max(6, Math.min(100, (v / axisCeiling) * 100));
             return (
               <div
                 key={`${s.lat}-${s.lon}-${i}`}
                 title={`${v.toFixed(0)} µg/m³ · ${s.category ?? "n/a"}`}
                 className="flex-1 rounded-t"
-                style={{
-                  height: `${Math.max(8, Math.min(100, (v / 350) * 100))}%`,
-                  background: bandColour(v),
-                }}
+                style={{ height: `${pct}%`, background: bandColour(v) }}
               />
             );
           })}
+        </div>
+        <div className="mt-1 flex justify-between text-[9px] text-slate-500">
+          <span>start</span>
+          <span data-testid={`worst-segment-${corridor.rank}`}>
+            worst stretch {corridor.peak_pm25.toFixed(0)} µg/m³
+          </span>
+          <span>end</span>
         </div>
       </div>
     </article>
@@ -187,6 +210,9 @@ export function RoutesCompare(): React.JSX.Element {
   const corridors: RouteCorridor[] = useMemo(() => {
     if (!result.data) return [];
     // the API ranks them; re-order the two it returns for the list
+    // Prefer the full ranked list; fall back to the two extremes when the
+    // response predates it.
+    if (result.data.corridors?.length) return result.data.corridors;
     return [result.data.cleanest, result.data.worst].filter(
       (c, i, arr) => arr.findIndex((x) => x.rank === c.rank) === i,
     );
@@ -238,7 +264,10 @@ export function RoutesCompare(): React.JSX.Element {
 
       {result.data && (
         <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-          <div className="order-2 lg:order-1 min-h-[22rem]">
+          {/* A definite height, not just min-height: the map wrapper resolves
+              `h-full` against this box, and with only min-height that resolved
+              against an auto height and the canvas collapsed to a sliver. */}
+          <div className="order-2 h-[22rem] lg:h-[30rem]">
             <RouteMap
               corridors={corridors}
               origin={result.data.origin}

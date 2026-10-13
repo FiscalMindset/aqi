@@ -85,7 +85,14 @@ async def compare_routes(
                 peak_at={"lat": peak.lat, "lon": peak.lon},
                 dose_index=round(mean_pm25 * hours, 1) if hours else None,
                 served_points=len(usable),
-                geometry=[[round(s.lon, 5), round(s.lat, 5)] for s in usable],
+                # The road polyline the router returned, not the handful of
+                # points we sampled for PM2.5. Returning the sample points as
+                # "geometry" drew a straight line between 12 dots and made a
+                # real road look like a fake one.
+                geometry=[
+                    [round(lon, 5), round(lat, 5)]
+                    for lon, lat in _decimate(route.geometry, 120)
+                ],
                 samples=samples,
             )
         )
@@ -111,6 +118,7 @@ async def compare_routes(
         destination={"lat": destination.lat, "lon": destination.lon},
         router=("osrm" if router_used else "straight-line-fallback"),
         corridor_count=len(corridors),
+        corridors=corridors,
         cleanest=best,
         worst=worst,
         mean_pm25_saving=saving,
@@ -125,6 +133,23 @@ async def compare_routes(
             "corridors are labelled straight-line and are not real roads."
         ),
     )
+
+
+def _decimate(
+    line: list[tuple[float, float]], limit: int
+) -> list[tuple[float, float]]:
+    """Thin a polyline to at most `limit` points, keeping both ends.
+
+    A 26 km OSRM road can carry several hundred vertices. Every one of them is
+    not needed to draw a corridor, and the payload is sent to a browser.
+    """
+    if len(line) <= limit:
+        return line
+    step = (len(line) - 1) / (limit - 1)
+    out = [line[round(i * step)] for i in range(limit)]
+    out[0] = line[0]
+    out[-1] = line[-1]
+    return out
 
 
 async def _profile(

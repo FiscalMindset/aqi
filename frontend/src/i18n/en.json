@@ -47,7 +47,8 @@
     "loading": "Estimating street-level air…",
     "error": "Could not load the estimate. Retry.",
     "retry": "Retry",
-    "outside": "This point is outside our Delhi-NCR coverage. Try a place in Delhi-NCR."
+    "outside": "This point is outside our Delhi-NCR coverage. Try a place in Delhi-NCR.",
+    "locationUnavailable": "Location is unavailable here — search for a place instead."
   },
   "categories": {
     "Good": "Good",

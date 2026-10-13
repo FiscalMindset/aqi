@@ -74,8 +74,11 @@ export function EstimatePanel({
       <p className="text-sm text-slate-400 mt-1">
         {t("explorer.interval")}: {estimate.pm25_low.toFixed(0)} – {estimate.pm25_high.toFixed(0)}
       </p>
-      <p className="text-xs text-slate-400 mt-1" data-testid="honesty">
-        {t("explorer.honesty")} {estimate.honesty}
+      <p className="mt-2 text-xs leading-relaxed text-slate-400" data-testid="honesty">
+        <span className="mb-1 block font-medium text-slate-300">
+          {t("explorer.honesty")}
+        </span>
+        {estimate.honesty}
       </p>
       {estimate.stale && (
         <p className="text-xs text-amber-300 mt-1" role="status">

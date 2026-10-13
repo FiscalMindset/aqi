@@ -9,6 +9,9 @@ import { VitePWA } from "vite-plugin-pwa";
 // 403s and the page renders blank. VITE_BASE_PATH must therefore match the
 // public path the app is served from.
 const base = process.env.VITE_BASE_PATH ?? "/";
+// Without the trailing slash: proxy keys are prefix matches, and
+// "/staging/" + "v1" would be "/staging/v1" while "" + "v1" is "/v1".
+const apiPrefix = `${base.replace(/\/$/, "")}/v1`;
 
 export default defineConfig({
   base,
@@ -52,19 +55,28 @@ export default defineConfig({
       },
     }),
   ],
+  // The proxy key must follow `base`, otherwise a build served under /staging
+  // requests /staging/v1 and the proxy silently misses it, so local and
+  // deployed behave differently for no visible reason.
   server: {
     proxy: {
-      "/v1": {
+      [apiPrefix]: {
         target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8000",
         changeOrigin: true,
+        // API Gateway strips the stage before invoking the Lambda; the dev
+        // proxy has to do the same or the backend 404s on /staging/v1.
+        rewrite: (path) => path.replace(new RegExp(`^${apiPrefix}`), "/v1"),
       },
     },
   },
   preview: {
     proxy: {
-      "/v1": {
+      [apiPrefix]: {
         target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8000",
         changeOrigin: true,
+        // API Gateway strips the stage before invoking the Lambda; the dev
+        // proxy has to do the same or the backend 404s on /staging/v1.
+        rewrite: (path) => path.replace(new RegExp(`^${apiPrefix}`), "/v1"),
       },
     },
   },
