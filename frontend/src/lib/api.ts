@@ -289,6 +289,25 @@ export interface ValidationMetrics {
   interval_coverage_note: string;
 }
 
+export interface CoverageBlock {
+  bbox: { min_lat: number; min_lon: number; max_lat: number; max_lon: number };
+  boundary_source: string;
+  boundary_fetched: string;
+  boundary_license: string;
+}
+
+export interface ReadyCheck {
+  component: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface ReadyResponse {
+  status: "ready" | "degraded";
+  checks: ReadyCheck[];
+  integrations: Record<string, string | boolean>;
+}
+
 export interface StatusResponse {
   status: "ok" | "degraded";
   api_version: string;
@@ -301,14 +320,25 @@ export interface StatusResponse {
     last_error: string | null;
     records_last_run: number;
   }>;
-  coverage: Record<string, unknown>;
+  /** Which credential path each optional dependency resolved to. */
+  integrations: Record<string, string | boolean>;
+  coverage: CoverageBlock;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestAt<T>(path: string, init?: RequestInit): Promise<T> {
+  const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+  return request<T>(path, init, base);
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  base: string = API_BASE,
+): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const res = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal });
+    const res = await fetch(`${base}${path}`, { ...init, signal: controller.signal });
     if (res.status === 204) return undefined as T;
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok) {
@@ -328,6 +358,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  /** Dependency probes: what the estimate actually needs, not just liveness. */
+  // /ready lives at the site root, not under /v1, so it must not go through
+  // API_BASE.
+  ready: () => requestAt<ReadyResponse>("/ready"),
+  /** Render the real alert email for a point without sending it. */
+  previewAlert: (body: {
+    lat: number;
+    lon: number;
+    locality?: string;
+    threshold_category?: string;
+  }) => request<{ subject: string; body: string; html: string }>("/alerts/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
   // explain=true asks the API for the per-parameter breakdown. It costs one
   // extra batched model pass, so it is opt-in rather than always on.
   estimate: (lat: number, lon: number, explain = true) =>

@@ -67,7 +67,13 @@ describe("StatusPage", () => {
           records_last_run: 3,
         },
       ],
-      coverage: {},
+      coverage: {
+      bbox: { min_lat: 28.4, min_lon: 76.8, max_lat: 28.9, max_lon: 77.4 },
+      boundary_source: "OpenStreetMap via Overpass API",
+      boundary_fetched: "2026-10-12T00:00:00Z",
+      boundary_license: "ODbL 1.0",
+    },
+    integrations: { stations: "openaq-public-archive" },
     });
     wrap(<StatusPage />);
     await waitFor(() => expect(screen.getByTestId("overall")).toBeDefined());
