@@ -15,7 +15,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../../lib/api";
-import { allPlaces } from "../../lib/places";
+import { allPlaces, type Place } from "../../lib/places";
+import { LocationPicker } from "./LocationPicker";
 
 const BANDS = [
   { key: "Moderately Polluted", range: "61 – 90 µg/m³", blurb: "Sensitive groups may notice." },
@@ -29,7 +30,7 @@ export function Subscribe() {
   const [email, setEmail] = useState("");
   const [locality, setLocality] = useState("");
   const [threshold, setThreshold] = useState<string>("Poor");
-  const [place, setPlace] = useState(allPlaces()[0]);
+  const [place, setPlace] = useState<Place>(allPlaces()[0]!);
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
@@ -97,35 +98,17 @@ export function Subscribe() {
           />
         </label>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm">
-            {t("subscribe.locality")}
-            <input
-              data-testid="sub-locality"
-              value={locality}
-              placeholder={place?.name}
-              onChange={(e) => setLocality(e.target.value)}
-              className="mt-1 w-full rounded bg-white/10 p-2 min-h-touch"
-            />
-          </label>
-          <label className="block text-sm">
-            {t("subscribe.place")}
-            <select
-              data-testid="sub-place"
-              value={place?.name ?? ""}
-              onChange={(e) =>
-                setPlace(allPlaces().find((p) => p.name === e.target.value) ?? place)
-              }
-              className="mt-1 w-full rounded bg-white/10 p-2 min-h-touch"
-            >
-              {allPlaces().map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <LocationPicker value={place} onChange={setPlace} />
+        <label className="block text-sm">
+          {t("subscribe.locality")}
+          <input
+            data-testid="sub-locality"
+            value={locality}
+            placeholder={place?.name}
+            onChange={(e) => setLocality(e.target.value)}
+            className="mt-1 w-full rounded bg-white/10 p-2 min-h-touch"
+          />
+        </label>
 
         <fieldset>
           <legend className="text-sm">{t("subscribe.threshold")}</legend>

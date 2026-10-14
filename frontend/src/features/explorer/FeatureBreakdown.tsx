@@ -75,16 +75,18 @@ export function FeatureBreakdown({
     >
       <header className="mb-1 flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-100">
-          What moved this number
+          The inputs used for this exact spot
         </h3>
         <span className="text-[11px] text-slate-400">
           {features.length} parameters used
         </span>
       </header>
       <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
-        Each bar is the change in the estimate if that one parameter were typical
-        for Delhi instead of its actual value here. Associations, in µg/m³ — not
-        causal claims.
+        These are the values the model read <em>for the point you selected</em> —
+        the wind, the time of day, the distance to each kind of source and the
+        recent station history. Each bar is how much the estimate would change
+        if that one input were typical for Delhi instead. Associations in µg/m³,
+        not causal claims.
       </p>
 
       {anchor !== null && (

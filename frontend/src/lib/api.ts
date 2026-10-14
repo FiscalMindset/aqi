@@ -296,6 +296,33 @@ export interface CoverageBlock {
   boundary_license: string;
 }
 
+export interface TrainingData {
+  available: boolean;
+  reason?: string;
+  station_observations: number;
+  weather_observations: number;
+  stations: number;
+  busiest_station_rows: number;
+  median_station_rows: number;
+  first_observation: string;
+  last_observation: string;
+  observed_min_ugm3: number;
+  observed_max_ugm3: number;
+  observed_mean_ugm3: number;
+  feature_count: number;
+  features: string[];
+  sources?: Record<string, string>;
+  metrics: {
+    version?: string;
+    created_utc?: string;
+    n_rows?: number;
+    winner?: string;
+    temporal_holdout?: Record<string, number>;
+    loso_mean?: Record<string, number>;
+    baselines?: Record<string, Record<string, number>>;
+  };
+}
+
 export interface ReadyCheck {
   component: string;
   ok: boolean;
@@ -370,6 +397,8 @@ export const api = {
   // deliberately does not throw on 5xx, or a degraded system would blank the
   // very page that reports it.
   ready: () => requestAt<ReadyResponse>("/ready", undefined, { tolerateStatuses: [503] }),
+  /** Counts derived from the training snapshot shipped in the image. */
+  trainingData: () => request<TrainingData>("/training-data"),
   /** Render the real alert email for a point without sending it. */
   previewAlert: (body: {
     lat: number;

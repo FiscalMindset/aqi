@@ -680,6 +680,29 @@
         }
       }
     },
+    "/v1/training-data": {
+      "get": {
+        "tags": [
+          "training-data"
+        ],
+        "summary": "What the model was trained on: counts, dates and features",
+        "operationId": "training_data_v1_training_data_get",
+        "responses": {
+          "200": {
+            "description": "Observation counts, coverage window, observed PM2.5 range, the feature list, and the shipped evaluation metrics. All derived from files.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Training Data V1 Training Data Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/routes/compare": {
       "post": {
         "tags": [

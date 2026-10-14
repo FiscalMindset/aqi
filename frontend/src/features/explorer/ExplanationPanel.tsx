@@ -1,48 +1,115 @@
 /**
  * The cited explanation.
  *
- * Every paragraph carries the ids of the passages it was composed from, so the
- * panel can show the workings rather than asking for trust. The passage list is
- * the audit trail: a measured station reading and a model output look different
- * here, and a paragraph whose evidence is missing is visibly unbacked.
+ * The prose was correct but it read as a wall: one long paragraph of numbers
+ * that a person has to decode. This splits it into cards with an icon, a
+ * heading and at most two sentences each, ordered so the most important thing
+ * is first. Every card still carries the ids of the passages it came from, and
+ * opens to show them.
+ *
+ * The rule that produced the original text is unchanged - a card only exists if
+ * a passage for it was actually retrieved, so nothing here can appear without
+ * evidence behind it.
  */
 
 import { useState } from "react";
 import type { ExplanationParagraph, Passage } from "../../lib/api";
 
-const KIND_LABEL: Record<string, string> = {
-  station_reading: "Official measurement",
-  station_trend: "Trend",
-  model_estimate: "Our estimate",
-  cpcb_band: "CPCB band",
-  model_parameters: "Model parameters",
-  model_accuracy: "Measured accuracy",
-  source_upwind: "Upwind source",
-  source_nearby: "Nearby source",
-  wind: "Wind",
-  ventilation: "Derived from wind",
-  fire_activity: "Fire detections",
-  freshness: "Data age",
+const KIND_META: Record<string, { label: string; icon: string; tint: string; border: string }> = {
+  model_estimate: {
+    label: "The number",
+    icon: "◎",
+    tint: "bg-teal-500/10",
+    border: "border-teal-500/30",
+  },
+  station_reading: {
+    label: "Measured nearby",
+    icon: "◉",
+    tint: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+  },
+  station_trend: {
+    label: "Trend",
+    icon: "↗",
+    tint: "bg-sky-500/10",
+    border: "border-sky-500/30",
+  },
+  source_upwind: {
+    label: "Upwind of you",
+    icon: "↑",
+    tint: "bg-orange-500/10",
+    border: "border-orange-500/30",
+  },
+  source_nearby: {
+    label: "Nearby source",
+    icon: "•",
+    tint: "bg-slate-500/10",
+    border: "border-slate-500/30",
+  },
+  wind: {
+    label: "Wind",
+    icon: "≈",
+    tint: "bg-cyan-500/10",
+    border: "border-cyan-500/30",
+  },
+  ventilation: {
+    label: "Ventilation",
+    icon: "☁",
+    tint: "bg-cyan-500/10",
+    border: "border-cyan-500/30",
+  },
+  model_parameters: {
+    label: "What moved it",
+    icon: "⚖",
+    tint: "bg-violet-500/10",
+    border: "border-violet-500/30",
+  },
+  fire_activity: {
+    label: "Fire activity",
+    icon: "▲",
+    tint: "bg-red-500/10",
+    border: "border-red-500/30",
+  },
+  model_accuracy: {
+    label: "How accurate",
+    icon: "✓",
+    tint: "bg-indigo-500/10",
+    border: "border-indigo-500/30",
+  },
+  freshness: {
+    label: "How fresh",
+    icon: "⏱",
+    tint: "bg-amber-500/10",
+    border: "border-amber-500/30",
+  },
+  cpcb_band: {
+    label: "What the band means",
+    icon: "≡",
+    tint: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+  },
 };
 
-const INTENT_ORDER = [
-  "what we estimate here",
-  "what is being measured nearby",
-  "is it getting better or worse",
-  "what is upwind of here",
-  "what is close to here",
-  "which way the air is moving",
-  "what moved that estimate",
-  "whether anything is burning",
-  "how much to trust it",
-  "how old the inputs are",
-  "what the category means",
-];
+const KIND_FOR_INTENT: Record<string, string> = {
+  "what we estimate here": "model_estimate",
+  "what is being measured nearby": "station_reading",
+  "is it getting better or worse": "station_trend",
+  "what is upwind of here": "source_upwind",
+  "what is close to here": "source_nearby",
+  "which way the air is moving": "wind",
+  "what moved that estimate": "model_parameters",
+  "whether anything is burning": "fire_activity",
+  "how much to trust it": "model_accuracy",
+  "how old the inputs are": "freshness",
+  "what the category means": "cpcb_band",
+};
 
-function orderOf(intent: string): number {
-  const i = INTENT_ORDER.indexOf(intent);
-  return i === -1 ? INTENT_ORDER.length : i;
-}
+const FALLBACK = {
+  label: "Detail",
+  icon: "·",
+  tint: "bg-white/5",
+  border: "border-white/10",
+};
 
 export function ExplanationPanel({
   headline,
@@ -59,83 +126,103 @@ export function ExplanationPanel({
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const byId = new Map(passages.map((p) => [p.passage_id, p]));
-  const sorted = [...paragraphs].sort((a, b) => orderOf(a.intent) - orderOf(b.intent));
 
   return (
-    <section aria-labelledby="explanation-heading" className="space-y-3">
-      <h2 id="explanation-heading" className="text-sm font-semibold">
-        What this means
+    <section aria-labelledby="explanation-heading" className="space-y-2" data-testid="explanation">
+      <h2 id="explanation-heading" className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+        Why this reading
       </h2>
 
-      <p className="text-base font-medium" data-testid="explanation-headline">
+      <p
+        className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-3 text-base font-medium"
+        data-testid="explanation-headline"
+      >
         {headline}
       </p>
 
-      {sorted.map((para) => {
+      {paragraphs.map((para, i) => {
+        const kind = KIND_FOR_INTENT[para.intent] ?? "other";
+        const meta = KIND_META[kind] ?? FALLBACK;
         const open = openId === para.intent;
         return (
-          <div key={para.intent} className="rounded-lg border border-line bg-surface-2 p-3">
-            <p className="text-sm leading-relaxed">{para.text}</p>
-            <button
-              type="button"
-              className="mt-2 text-xs text-accent underline underline-offset-2"
-              aria-expanded={open}
-              onClick={() => setOpenId(open ? null : para.intent)}
-            >
-              {open ? "Hide evidence" : `Show evidence (${para.passage_ids.length})`}
-            </button>
+          <article
+            key={`${para.intent}-${i}`}
+            data-testid={`explain-card-${kind}`}
+            className={`rounded-xl border p-3 ${meta.border} ${meta.tint}`}
+          >
+            <div className="flex items-baseline gap-2">
+              <span aria-hidden="true" className="text-sm text-slate-200">
+                {meta.icon}
+              </span>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+                {meta.label}
+              </h3>
+              <button
+                type="button"
+                className="ml-auto text-[11px] text-slate-400 underline underline-offset-2 hover:text-slate-200"
+                aria-expanded={open}
+                onClick={() => setOpenId(open ? null : para.intent)}
+                data-testid={`evidence-toggle-${kind}`}
+              >
+                {open ? "hide" : "evidence"}
+              </button>
+            </div>
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-100">{para.text}</p>
+
             {open && (
-              <ul className="mt-2 space-y-1.5">
+              <ul className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
                 {para.passage_ids.map((id) => {
                   const p = byId.get(id);
                   if (!p) return null;
                   return (
-                    <li key={id} className="rounded bg-surface-3 p-2 text-xs">
-                      <span className="font-medium">{KIND_LABEL[p.kind] ?? p.kind}</span>
-                      {p.measured && <span className="ml-1 text-emerald-400">measured</span>}
-                      <p className="mt-0.5 text-muted">{p.text}</p>
-                      <p className="mt-0.5 text-muted">
-                        confidence weight {p.authority.toFixed(2)}
-                        {p.source_url && (
-                          <>
-                            {" · "}
-                            <a
-                              href={p.source_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="underline underline-offset-2"
-                            >
-                              source
-                            </a>
-                          </>
-                        )}
-                      </p>
+                    <li key={id} className="rounded bg-night-900/40 p-2 text-[11px] text-slate-300">
+                      <span className="font-mono text-slate-400">{p.passage_id}</span>
+                      {p.measured && (
+                        <span className="ml-1.5 rounded bg-emerald-500/20 px-1 text-emerald-300">
+                          measured
+                        </span>
+                      )}
+                      <span className="ml-1.5 text-slate-500">
+                        weight {p.authority.toFixed(2)}
+                      </span>
+                      <p className="mt-0.5">{p.text}</p>
+                      {p.source_url && (
+                        <a
+                          href={p.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal-300 underline underline-offset-2"
+                        >
+                          source ↗
+                        </a>
+                      )}
                     </li>
                   );
                 })}
               </ul>
             )}
-          </div>
+          </article>
         );
       })}
 
       {gaps.length > 0 && (
         <div
           role="status"
-          className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs"
+          data-testid="evidence-gaps"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100"
         >
-          <p className="font-medium">Some inputs did not answer</p>
-          <p className="mt-1 text-muted">
-            No {gaps.join(", no ")}. Anything that depended on them is left out above rather
-            than guessed.
+          <p className="font-semibold">Some inputs did not answer</p>
+          <p className="mt-1 text-amber-200/90">
+            No {gaps.join(", no ")}. Anything that depended on them is left out
+            above rather than guessed.
           </p>
         </div>
       )}
 
-      <p className="text-xs text-muted">
+      <p className="pt-1 text-[11px] text-slate-500">
         Written from retrieved evidence
-        {servedBy.includes("groq") ? " and lightly rephrased by a language model" : ""}.
-        Every number above came from a cited passage.
+        {servedBy.includes("groq") ? ", lightly rephrased by a language model" : ""}.
+        Every number came from a cited passage.
       </p>
     </section>
   );

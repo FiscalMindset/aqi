@@ -11,6 +11,7 @@ import { PersonaCards } from "./PersonaCards";
 import { AgentTrace } from "./AgentTrace";
 import { ExplanationPanel } from "./ExplanationPanel";
 import { WindPanel } from "./WindPanel";
+import { TrainingDataPanel } from "../methodology/TrainingDataPanel";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
   useEstimate,
@@ -102,6 +103,7 @@ export function Explorer() {
       {showDetail && explain.data && <CausesPanel attribution={explain.data.attribution} />}
       {showDetail && explain.data && <PersonaCards advice={explain.data.advice} />}
       <ModelCardPanel card={modelCard.data ?? null} />
+      <TrainingDataPanel />
       <p className="text-xs text-slate-400">
         Nearest official station:{" "}
         {stations.data?.[0]
@@ -125,6 +127,7 @@ export function Explorer() {
           lat={point.lat}
           lon={point.lon}
           sources={sources.data?.sources ?? []}
+          windFromDeg={estimate.data?.weather?.wind_from_deg ?? null}
           onPick={selectPlace}
         />
       </div>

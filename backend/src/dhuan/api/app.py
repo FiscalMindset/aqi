@@ -32,6 +32,7 @@ from dhuan.api.routers import (
     stations,
     status,
     subscriptions,
+    training_data,
     validation,
 )
 from dhuan.core.config import get_settings
@@ -170,6 +171,7 @@ def create_app() -> FastAPI:
     app.include_router(subscriptions.router)
     app.include_router(model_card.router)
     app.include_router(alert_preview.router)
+    app.include_router(training_data.router)
     app.include_router(routes.router)
 
     # ------------------------------------------------------------------ SPA --
