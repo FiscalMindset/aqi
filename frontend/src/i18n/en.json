@@ -174,5 +174,15 @@
     "tapHint": "Click the map to move the point anywhere in Delhi-NCR, or search for a named locality. The alert fires for this exact location.",
     "savedHeading": "Or choose from saved places",
     "stationRead": "Estimated PM2.5 here"
+  },
+  "crosscheck": {
+    "title": "Independent check",
+    "cams": "CAMS regional model",
+    "yours": "Our station-anchored estimate",
+    "gap": "Gap",
+    "explainer": "Two different measurements of the same air. Ours is anchored to the nearest CPCB monitor, so it can catch a pocket of pollution a regional grid smooths away; CAMS is a satellite-and-model average over tens of kilometres. A gap is normal — a large one usually means your street is dirtier than the regional average, not that the number is wrong.",
+    "notAReading": "This is a model, not a monitor at your address.",
+    "unavailable": "No independent reading available right now.",
+    "dustNote": "Delhi's dust season is strong right now, so the aerosol reading includes dust — it is not fire smoke."
   }
 }

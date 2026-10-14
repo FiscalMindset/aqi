@@ -109,6 +109,29 @@ class EstimateOut(BaseModel):
     # all. Surfacing it here means the UI can explain the number without
     # a second round trip.
     weather: WeatherOut | None = None
+    cross_check: CrossCheckOut | None = None
+
+
+class CrossCheckOut(BaseModel):
+    """An independent second opinion on PM2.5, from a different data chain.
+
+    Deliberately not merged into the estimate and deliberately not labelled a
+    source attribution. Our estimate is anchored to a CPCB ground monitor; this
+    is a regional CAMS aerosol grid. They are different measurements of the same
+    atmosphere, so the gap between them is informative rather than an error.
+    """
+
+    pm25_ugm3: float | None = None
+    us_aqi: float | None = None
+    european_aqi: float | None = None
+    dust_ugm3: float | None = None
+    # Our estimate minus CAMS. Positive means the local station reads dirtier
+    # than the regional picture.
+    delta_ugm3: float | None = None
+    age_seconds: float | None = None
+    provider: str = "Open-Meteo Air Quality (CAMS)"
+    # Always explicit so no UI can present this as a ground reading.
+    is_ground_reading: bool = False
 
 
 class WeatherOut(BaseModel):

@@ -41,6 +41,7 @@ const estimate: Estimate = {
     ventilation: "moderate",
     ventilation_reason: "there is light wind, so pollution disperses only slowly",
   },
+  cross_check: null,
   features_used: [
     {
       name: "station_lag24",

@@ -64,6 +64,29 @@ class WeatherObservation:
 
 
 @dataclass(slots=True)
+class AirQualityObservation:
+    """Hourly CAMS-based aerosol and AQI at a point (Open-Meteo).
+
+    A regional model grid, NOT a ground reading and NOT a fire detection. Any
+    `dust` value here must never be presented as wildfire smoke: during Delhi's
+    post-monsoon dust season it is routinely an order of magnitude above any
+    plausible smoke contribution.
+    """
+
+    observed_at: datetime
+    pm25: float | None = None
+    pm10: float | None = None
+    dust: float | None = None
+    us_aqi: float | None = None
+    european_aqi: float | None = None
+    provider: str = "open-meteo-air-quality (CAMS)"
+    license_note: str = "Open-Meteo / CAMS, free for non-commercial use"
+
+    def age_seconds(self) -> float:
+        return max(0.0, (utcnow() - self.observed_at).total_seconds())
+
+
+@dataclass(slots=True)
 class FireDetection:
     """A NASA FIRMS active-fire detection."""
 

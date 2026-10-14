@@ -18,12 +18,14 @@ from fastapi import APIRouter, Depends, Query
 
 from dhuan.agents.corpus import _ventilation, compass
 from dhuan.api.errors import outside_coverage_problem, upstream_problem
-from dhuan.api.models import EstimateOut, FeatureContribution, WeatherOut
+from dhuan.api.models import CrossCheckOut, EstimateOut, FeatureContribution, WeatherOut
 from dhuan.api.services import nearest_reading, stations_near, weather_now
 from dhuan.core.config import Settings, get_settings
+from dhuan.core.logging import get_logger
 from dhuan.core.metrics import record
 from dhuan.core.units import Point
 from dhuan.geo.boundary import point_in_ncr
+from dhuan.ingest.types import utcnow
 from dhuan.model.cpcb import CPCB_TABLE_VERSION, category_for_pm25
 from dhuan.model.predict import (
     ModelNotTrainedError,
@@ -38,6 +40,7 @@ from dhuan.model.predict import (
 
 router = APIRouter(prefix="/v1", tags=["estimate"])
 
+logger = get_logger("api.estimate")
 
 def _weather_out(weather: Any, outcome: Any) -> WeatherOut | None:
     """Turn the weather observation into the block the UI renders.
@@ -63,6 +66,33 @@ def _weather_out(weather: Any, outcome: Any) -> WeatherOut | None:
         ventilation=verdict,
         ventilation_reason=reason,
     )
+
+def _cross_check_out(rows: Any, our_pm25: float | None) -> CrossCheckOut | None:
+    """Independent CAMS PM2.5 for the same hour, beside our estimate.
+
+    Never merged and never presented as an attribution: a regional aerosol grid
+    cannot say which source produced the pollution. It is here so a large gap
+    between the two is visible rather than hidden - that gap usually means the
+    local monitor is catching a pocket of pollution the grid has smoothed away.
+    """
+    if not rows:
+        return None
+    now = utcnow()
+    # Pick the row closest to now rather than blindly taking the first: the
+    # forecast starts at midnight, which is not "current".
+    best = min(rows, key=lambda r: abs((now - r.observed_at).total_seconds()))
+    delta = None
+    if our_pm25 is not None and best.pm25 is not None:
+        delta = round(our_pm25 - best.pm25, 1)
+    return CrossCheckOut(
+        pm25_ugm3=best.pm25,
+        us_aqi=best.us_aqi,
+        european_aqi=best.european_aqi,
+        dust_ugm3=best.dust,
+        delta_ugm3=delta,
+        age_seconds=round(best.age_seconds(), 0),
+    )
+
 
 HONESTY_NOTE = (
     "Estimate, not a measurement. The interval is the model's calibrated 80% "
@@ -112,6 +142,18 @@ async def compute_estimate(
 
     # 2) weather now (wind/temp/etc. explain the number and feed the cone)
     wx = await weather_now(lat, lon, settings)
+
+    # Independent CAMS-based PM2.5 for the same point, purely as a cross-check.
+    # Failures are swallowed on purpose: a missing second opinion must never
+    # take down the estimate the reader actually came for.
+    cross_check: list[Any] = []
+    try:
+        from dhuan.ingest.airquality import AirQualityClient  # noqa: PLC0415
+
+        cross_check = await AirQualityClient(settings).current(Point(lat=lat, lon=lon))
+    except Exception as exc:
+        record("CrossCheckUnavailable", 1)
+        logger.warning("cross_check_unavailable: %s", type(exc).__name__)
     weather = wx.data
 
     # 3) model or baseline
@@ -200,6 +242,7 @@ async def compute_estimate(
         model_adjustment_ugm3=round(model_adjustment, 1) if model_adjustment is not None else None,
         features_used=features_used,
         weather=_weather_out(weather, wx),
+        cross_check=_cross_check_out(cross_check, pm25_mid),
         method=(
             "gradient-boosted-trees on persistence-anchored residual"
             if served_by == "model"

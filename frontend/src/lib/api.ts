@@ -43,6 +43,17 @@ export class ApiError extends Error {
   }
 }
 
+export interface CrossCheck {
+  pm25_ugm3: number | null;
+  us_aqi: number | null;
+  european_aqi: number | null;
+  dust_ugm3: number | null;
+  delta_ugm3: number | null;
+  age_seconds: number | null;
+  provider: string;
+  is_ground_reading: boolean;
+}
+
 export interface StationReading {
   station_id: string;
   name: string;
@@ -97,6 +108,7 @@ export interface Estimate {
   features_used: FeatureContribution[];
   /** Current conditions at this point; null only if the weather feed failed. */
   weather: Weather | null;
+  cross_check: CrossCheck | null;
 }
 
 export interface FeatureContribution {

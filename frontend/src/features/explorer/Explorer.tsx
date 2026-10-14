@@ -11,6 +11,7 @@ import { PersonaCards } from "./PersonaCards";
 import { AgentTrace } from "./AgentTrace";
 import { ExplanationPanel } from "./ExplanationPanel";
 import { WindPanel } from "./WindPanel";
+import { CrossCheck } from "./CrossCheck";
 import { TrainingDataPanel } from "../methodology/TrainingDataPanel";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
@@ -62,6 +63,9 @@ export function Explorer() {
     <div className="space-y-4">
       <EstimatePanel estimate={estimate.data} loading={estimate.isPending} error={estimate.error} />
       {estimate.data?.weather && <WindPanel weather={estimate.data.weather} />}
+      {estimate.data?.cross_check && (
+        <CrossCheck data={estimate.data.cross_check} ourPm25={estimate.data.pm25_mid} />
+      )}
       {estimate.data && (
         <FeatureBreakdown
           features={estimate.data.features_used}
