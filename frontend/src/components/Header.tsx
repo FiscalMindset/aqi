@@ -7,6 +7,7 @@ const NAV = [
   { to: "/routes", key: "nav.routes", end: false },
   { to: "/how-it-works", key: "nav.how", end: false },
   { to: "/methodology", key: "nav.method", end: false },
+  { to: "/algorithm", key: "nav.algorithm", end: false },
   { to: "/status", key: "nav.status", end: false },
   { to: "/subscribe", key: "nav.subscribe", end: false },
 ];

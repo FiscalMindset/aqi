@@ -8,7 +8,8 @@
     "how": "How it works",
     "method": "Methodology",
     "status": "Status",
-    "subscribe": "Alerts"
+    "subscribe": "Alerts",
+    "algorithm": "Algorithm"
   },
   "demo": {
     "banner": "DEMO DATA — this is a recorded example, not a live measurement."
@@ -188,5 +189,57 @@
   "versions": {
     "title": "Every model version we kept",
     "explainer": "Each retrain is kept, not overwritten, so a change in accuracy is visible rather than silent. A version marked pruned still lists the commit that produced it, so the model can be recovered from history. MAE is measured at training time on that version's own holdout."
+  },
+  "algo": {
+    "title": "Algorithm, data and accuracy",
+    "intro": "Everything about how the number is produced: the algorithm, the pipeline it runs, the features it reads, the data it was trained on, and the measured accuracy of each. Every figure here is read from the API and updates when the model is retrained.",
+    "modelTitle": "The model",
+    "features": "Features",
+    "rows": "Training rows",
+    "stations": "Stations",
+    "trained": "Trained",
+    "pipelineTitle": "How an estimate is produced",
+    "pipeline": [
+      {
+        "title": "Find the nearest monitor",
+        "body": "The closest CPCB station to the point you selected, with its most recent reading and its history. If nothing is within range the API says so rather than guessing."
+      },
+      {
+        "title": "Read the weather",
+        "body": "Hourly temperature, humidity, wind speed and direction, pressure, rainfall and solar radiation at your coordinates. Wind direction matters most: pollution travels downwind from a source."
+      },
+      {
+        "title": "Predict the change, not the level",
+        "body": "The model learns the residual between the current and previous station reading, so its job is only to work out the correction. Repeating the last reading is therefore built into the model as the thing it has to beat.",
+        "formula": "residual = pm25(t) - pm25(t-1h)"
+      },
+      {
+        "title": "Take three quantiles",
+        "body": "Separate models are trained for the 10th, 50th and 90th percentile. The median becomes the estimate and the outer two describe the spread before calibration.",
+        "formula": "estimate = anchor + q50"
+      },
+      {
+        "title": "Calibrate the interval",
+        "body": "Raw quantile models under-cover during sharp swings. A conformal radius fitted on held-out data widens the interval until it actually contains the truth about 80% of the time.",
+        "formula": "range = estimate +/- conformal radius"
+      },
+      {
+        "title": "Correct for distance",
+        "body": "A station far away says less about your street, so the correction shrinks toward the anchor and the interval is widened rather than quietly reported as if it were precise."
+      }
+    ],
+    "accuracyTitle": "Measured accuracy",
+    "accuracyNote": "Two protocols, because they answer different questions. Future hours asks whether a known station can be predicted an hour ahead. Unseen station holds out whole stations, which is the harder and more relevant test for a new locality - and the row shown in amber is the one to trust when you are far from a monitor. The baseline is the honest alternative to any model: repeat the last reading. Everything here is a conservative lower bound, because the recorded evaluation scores a model fitted on the training split while the shipped model is refitted on all of it.",
+    "featuresTitle": "The features it reads",
+    "dataTitle": "The data",
+    "stationRows": "Station readings",
+    "weatherRows": "Weather hours",
+    "range": "Range",
+    "pmRange": "PM2.5 observed",
+    "dataPending": "Loading the training figures…",
+    "categoriesTitle": "Air quality categories",
+    "categoriesNote": "Official CPCB bands, applied to hourly values as a deliberate simplification.",
+    "versionsTitle": "Every model version",
+    "unavailable": "The model card could not be loaded, so these figures are unavailable rather than guessed."
   }
 }

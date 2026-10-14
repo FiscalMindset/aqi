@@ -8,6 +8,7 @@ const RoutesPage = lazy(() => import("../features/routes/RoutesCompare"));
 const Subscribe = lazy(() => import("../features/subscribe/Subscribe"));
 const HowItWorks = lazy(() => import("../features/howitworks/HowItWorks"));
 const Methodology = lazy(() => import("../features/methodology/Methodology"));
+const Algorithm = lazy(() => import("../features/methodology/Algorithm"));
 const StatusPage = lazy(() => import("../features/status/StatusPage"));
 
 export const routes: RouteObject[] = [
@@ -27,6 +28,7 @@ export const routes: RouteObject[] = [
       { path: "subscribe", element: <Loading><Subscribe /></Loading> },
       { path: "how-it-works", element: <Loading><HowItWorks /></Loading> },
       { path: "methodology", element: <Loading><Methodology /></Loading> },
+      { path: "algorithm", element: <Loading><Algorithm /></Loading> },
       { path: "status", element: <Loading><StatusPage /></Loading> },
     ],
   },

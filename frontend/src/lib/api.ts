@@ -24,6 +24,15 @@ export const API_BASE =
   (import.meta.env.VITE_API_BASE as string | undefined) ??
   `${BASE_PATH.replace(/\/$/, "")}/v1`;
 
+/** Abort budget for a single indexed read. See `request` for the exceptions. */
+const DEFAULT_TIMEOUT_MS = 15000;
+/**
+ * Routing plus per-corridor exposure profiling. Kept just under the API
+ * Gateway integration timeout (29s) so the browser gives up a moment before
+ * the gateway does, and gets a real error instead of a stalled page.
+ */
+const ROUTE_TIMEOUT_MS = 27000;
+
 export interface Problem {
   type: string;
   title: string;
@@ -388,7 +397,7 @@ export interface StatusResponse {
 async function requestAt<T>(
   path: string,
   init?: RequestInit,
-  options: { tolerateStatuses?: number[] } = {},
+  options: { tolerateStatuses?: number[]; timeoutMs?: number } = {},
 ): Promise<T> {
   const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
   return request<T>(path, init, base, options);
@@ -398,10 +407,18 @@ async function request<T>(
   path: string,
   init?: RequestInit,
   base: string = API_BASE,
-  options: { tolerateStatuses?: number[] } = {},
+  options: { tolerateStatuses?: number[]; timeoutMs?: number } = {},
 ): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  // Most calls are a single indexed lookup and answer in well under a second.
+  // Route comparison is different: it calls the routing service and then runs
+  // the estimator along every corridor, and on a cold Lambda that legitimately
+  // runs past the default. Aborting at 15s left the page stuck on "Finding
+  // real routes" with no result and no error, which is the worst of both.
+  const timeout = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  );
   try {
     const res = await fetch(`${base}${path}`, { ...init, signal: controller.signal });
     if (res.status === 204) return undefined as T;
@@ -466,17 +483,21 @@ export const api = {
     toLon: number;
     maxSamples?: number;
   }) =>
-    request<RouteComparison>("/routes/compare", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from_lat: body.fromLat,
-        from_lon: body.fromLon,
-        to_lat: body.toLat,
-        to_lon: body.toLon,
-        max_samples: body.maxSamples ?? 10,
-      }),
-    }),
+    requestAt<RouteComparison>(
+      "/routes/compare",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_lat: body.fromLat,
+          from_lon: body.fromLon,
+          to_lat: body.toLat,
+          to_lon: body.toLon,
+          max_samples: body.maxSamples ?? 10,
+        }),
+      },
+      { timeoutMs: ROUTE_TIMEOUT_MS },
+    ),
   model: () => request<ModelCard>("/model"),
   modelVersions: () => request<ModelVersions>("/model/versions"),
   validation: () => request<ValidationMetrics>("/validation"),

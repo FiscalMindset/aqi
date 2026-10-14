@@ -1,9 +1,53 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouteCompare } from "../../hooks/useApi";
 import { allPlaces, type Place } from "../../lib/places";
 import type { RouteCorridor } from "../../lib/api";
 import { RouteMap } from "./RouteMap";
+
+/**
+ * A pending card that shows it is alive.
+ *
+ * Route comparison genuinely takes tens of seconds on a cold start: it calls
+ * the routing service, then runs the estimator along every corridor. A static
+ * "loading…" reads as frozen, which is exactly how this page looked broken. An
+ * elapsed counter plus an honest note about what is slow turns a wait into
+ * information.
+ */
+function PendingCard(): React.JSX.Element {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setSeconds((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const slow = seconds >= 8;
+  return (
+    <div
+      data-testid="routes-loading"
+      role="status"
+      aria-live="polite"
+      className="rounded-xl border border-amber-500/30 bg-slate-900/60 p-8 text-center text-sm"
+    >
+      <div className="mx-auto mb-3 h-1 w-40 overflow-hidden rounded-full bg-slate-700">
+        <div className="h-full w-1/3 animate-pulse rounded-full bg-amber-400/80" />
+      </div>
+      <p className="text-slate-300">
+        Finding real roads and estimating the air along them…
+      </p>
+      <p className="mt-1 font-mono text-xs text-slate-500">
+        {seconds}s elapsed
+      </p>
+      {slow && (
+        <p className="mx-auto mt-3 max-w-md text-xs leading-relaxed text-amber-200/90">
+          This is genuinely slow the first time a route is requested: the
+          routing service has to answer, and then every corridor is sampled and
+          estimated one point at a time. It normally lands within thirty
+          seconds. You can leave this page open — it is working.
+        </p>
+      )}
+    </div>
+  );
+}
 
 /** CPCB band colour, same scale the rest of the app uses. */
 function bandColour(pm25: number): string {
@@ -243,14 +287,7 @@ export function RoutesCompare(): React.JSX.Element {
         <PlaceSelect label="To" value={to} onChange={setTo} testId="route-to" />
       </div>
 
-      {result.isPending && (
-        <div
-          data-testid="routes-loading"
-          className="rounded-xl border border-white/10 bg-slate-900/50 p-8 text-center text-sm text-slate-400"
-        >
-          Finding real routes and estimating the air along them…
-        </div>
-      )}
+      {result.isPending && <PendingCard />}
 
       {result.error != null && (
         <div

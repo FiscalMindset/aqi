@@ -381,6 +381,15 @@ Resources:
       Timeout: 30
       Architectures: [arm64]
       AutoPublishAlias: live
+      Environment:
+        Variables:
+          # Alert topic. This existed only as a CloudFormation Output, so
+          # sns_topic_arn was always empty in the running function: subscribing
+          # an address for confirmation was a no-op and the confirmation email
+          # was never sent, while the API still replied "a confirmation email
+          # has been sent". Storing the subscription and never emailing it left
+          # every subscription pending forever.
+          SNS_TOPIC_ARN: !Ref AlertTopic
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: '2012-10-17'
@@ -400,7 +409,14 @@ Resources:
               Action: bedrock:InvokeModel
               Resource: '*'
             - Effect: Allow
-              Action: sns:Publish
+              Action:
+                - sns:Publish
+                # Subscribe an address for confirmation; without this the
+                # confirmation step silently does nothing.
+                - sns:Subscribe
+                - sns:GetTopicAttributes
+                - sns:ListSubscriptionsByTopic
+                - sns:Unsubscribe
               Resource: !Ref AlertTopic
             - Effect: Allow
               Action:
@@ -436,6 +452,7 @@ Resources:
       Environment:
         Variables:
           CMD: pipeline
+          SNS_TOPIC_ARN: !Ref AlertTopic
       Policies:
         - AWSLambdaBasicExecutionRole
         - DynamoDBCrudPolicy:

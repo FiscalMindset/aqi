@@ -4,6 +4,7 @@ import {
   type Estimate,
   type ModelCard,
   type ModelVersions,
+  type TrainingData,
   type RouteComparison,
   type SourcesResponse,
   type StationReading,
@@ -84,6 +85,14 @@ export function useModelCard(): UseQueryResult<ModelCard, Error> {
   return useQuery({
     queryKey: ["model-card"],
     queryFn: api.model,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+export function useTrainingData(): UseQueryResult<TrainingData, Error> {
+  return useQuery({
+    queryKey: ["training-data"],
+    queryFn: api.trainingData,
     staleTime: 60 * 60 * 1000,
   });
 }

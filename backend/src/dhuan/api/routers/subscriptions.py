@@ -103,15 +103,36 @@ async def create_subscription(
         )
     except Exception as exc:
         raise _store_unavailable(exc) from exc
-    _request_sns_confirmation(settings, body.email, body.locality, token)
+    confirmation_sent = _request_sns_confirmation(settings, body.email, body.locality, token)
     record("SubscriptionsCreated", 1)
+    if not confirmation_sent:
+        # Previously this replied "a confirmation email has been sent"
+        # unconditionally, including when the topic was unconfigured and no
+        # email had been requested at all. The subscription then sat pending
+        # forever and the person waited for a message that could never arrive.
+        record("SubscriptionsConfirmationUnsent", 1)
+        return {
+            "id": sub_id,
+            "status": "pending_confirmation",
+            "locality": body.locality,
+            "threshold_category": body.threshold_category,
+            "confirmation_sent": False,
+            "confirmation": (
+                "Your address is saved, but the confirmation email could not be "
+                "sent from this deployment, so the alert will not activate. "
+                "Nothing was silently dropped: the subscription exists and is "
+                "waiting on a confirmation that this deployment cannot deliver."
+            ),
+        }
     return {
         "id": sub_id,
         "status": "pending_confirmation",
         "locality": body.locality,
         "threshold_category": body.threshold_category,
+        "confirmation_sent": True,
         "confirmation": (
-            "A confirmation email has been sent; alerts activate after confirmation."
+            "A confirmation email has been sent; alerts activate after "
+            "confirmation."
         ),
     }
 
@@ -219,11 +240,17 @@ async def delete_subscription(
 
 def _request_sns_confirmation(
     settings: Settings, email: str, locality: str, token: str
-) -> None:
-    """Subscribe the email to the SNS topic (email confirmation is SNS's job)."""
+) -> bool:
+    """Subscribe the email to the SNS topic. Returns whether it was requested.
+
+    Returns a bool rather than None so the caller can tell the reader the truth:
+    a subscription that was stored but never emailed is a different state from
+    one awaiting a click, and reporting both as "sent" is how someone ends up
+    waiting forever for a message that was never requested.
+    """
     if not settings.sns_topic_arn:
         logger.warning("sns_not_configured: subscription stored, confirmation email not sent")
-        return
+        return False
     from dhuan.alerts.alerts import SnsAlerter  # noqa: PLC0415 - only on create
 
     del token  # the confirmation link is verified against the stored token
@@ -240,6 +267,8 @@ def _request_sns_confirmation(
         )
     except Exception as exc:
         logger.warning("sns_subscribe_failed: %s", exc)
+        return False
+    return True
 
 
 def _sns_unsubscribe(settings: Settings, email: str) -> None:
