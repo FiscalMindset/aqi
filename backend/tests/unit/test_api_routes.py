@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture()
-def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def api(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> TestClient:
     """TestClient with env-driven settings and a clean client/cache state."""
     for key, value in {
         "OPENAQ_API_KEY": "test-key",
@@ -29,7 +29,13 @@ def api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     reset_clients()
     get_station_cache()._store.clear()
     get_weather_cache()._store.clear()
-    return TestClient(create_app())
+    client = TestClient(create_app())
+    # get_settings is lru_cached, and this fixture sets OPENAQ_API_KEY. Without
+    # clearing it again on teardown, every later test in the session inherits
+    # that credential and asserts against a Settings it did not ask for -
+    # which showed up as an unrelated archive test failing only in a full run.
+    request.addfinalizer(config.get_settings.cache_clear)
+    return client
 
 
 def test_grid_returns_304_for_matching_etag(api: TestClient) -> None:
@@ -378,3 +384,101 @@ class TestSubscriptionConfirmationIsNotFaked:
         body = res.json()
         assert body["confirmation_sent"] is False
         assert "could not be sent" in body["confirmation"]
+
+
+class TestAlertEmailIsComposedFromRealValues:
+    """publish_alerts was a stub: every email carried pm25 = 0.0 and an
+    unsubscribe link pointing at dhuan-detective.example, and the message was
+    published under the literal locality "delhi-ncr" while the subscriber's
+    FilterPolicy used the name they actually typed. A delivered message would
+    have read "0 µg/m3" and offered a link that resolves nowhere.
+    """
+
+    def test_uses_the_subscribers_own_numbers_and_a_real_unsubscribe_link(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from dhuan.pipeline import tasks
+
+        published: list[dict[str, object]] = []
+
+        class FakeAlerter:
+            def configured(self) -> bool:
+                return True
+
+            def publish(self, **kw: object) -> str:
+                published.append(kw)
+                return "mid-1"
+
+        monkeypatch.setattr("dhuan.alerts.alerts.best_alerter", lambda _s: FakeAlerter())
+        monkeypatch.setattr(
+            tasks,
+            "get_settings_for_pipeline",
+            type(
+                "S", (), {"public_base_url": "https://example.test/staging"}
+            ),
+        )
+
+        tasks.publish_alerts(
+            {
+                "alerts": [
+                    {
+                        "decision": {"should_send": True, "band": "Poor"},
+                        "email": "person@example.com",
+                        "locality": "Ghevra",
+                        "threshold_category": "Poor",
+                        "unsubscribe_token": "tok123456",
+                        "pm25_mid": 96.4,
+                    }
+                ]
+            }
+        )
+
+        assert len(published) == 1
+        sent = published[0]
+        assert sent["locality"] == "ghevra", "must match the subscribe-time FilterPolicy"
+        body = str(sent["body"])
+        assert "96" in body, f"body should carry the real reading, got: {body[:200]}"
+        assert "0 µg/m" not in body.replace("96.4 µg/m", "")
+        assert "tok123456" in str(sent["body"]) or "tok123456" in str(sent.get("subject"))
+        assert "dhuan-detective.example" not in body
+
+    def test_refuses_to_send_without_an_unsubscribe_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from dhuan.pipeline import tasks
+
+        published: list[dict[str, object]] = []
+
+        class FakeAlerter:
+            def configured(self) -> bool:
+                return True
+
+            def publish(self, **kw: object) -> str:
+                published.append(kw)
+                return "mid-1"
+
+        monkeypatch.setattr("dhuan.alerts.alerts.best_alerter", lambda _s: FakeAlerter())
+        monkeypatch.setattr(
+            tasks,
+            "get_settings_for_pipeline",
+            type(
+                "S", (), {"public_base_url": "https://example.test/staging"}
+            ),
+        )
+
+        out = tasks.publish_alerts(
+            {
+                "alerts": [
+                    {
+                        "decision": {"should_send": True, "band": "Poor"},
+                        "email": "person@example.com",
+                        "locality": "Ghevra",
+                        "unsubscribe_token": "",
+                        "pm25_mid": 96.4,
+                    }
+                ]
+            }
+        )
+        # Sending an alert the recipient cannot stop is worse than not sending it.
+        assert published == []
+        assert out["skipped"] == 1

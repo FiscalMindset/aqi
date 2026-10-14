@@ -239,13 +239,21 @@ def persist_estimates(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
-    """Decide alerts for every confirmed subscription against its estimate."""
+    """Decide alerts for every subscription against its estimate.
+
+    Deliberately not filtered on our own `confirmed` flag. AWS SNS performs the
+    double opt-in for email endpoints on its own side and never tells us when the
+    recipient clicks through, so that flag would sit at False forever and gate
+    every alert off. Publishing to a subscription SNS still has pending is
+    harmless - SNS simply will not deliver it - so SNS is the single real gate
+    and this side stays out of the way.
+    """
     from dhuan.store.dynamodb import SubscriptionsStore
 
     predictions = event.get("predictions", [])
     by_cell = {p["cell"]: p for p in predictions}
     store = SubscriptionsStore()
-    subs = list(store.by_locality("delhi-ncr"))
+    subs = list(store.all_subscriptions())
     if not subs:
         return {"alerts": [], "ok": True}
     # locality estimates: anchor on the grid cell nearest each subscription
@@ -274,7 +282,20 @@ def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
             last_alerted_at=None,
             now=now,
         )
-        decisions.append({"sub": key, "decision": asdict(d)})
+        # Everything publish_alerts needs travels with the decision, because the
+        # message must be composed from the subscriber's own record rather than
+        # from constants.
+        decisions.append(
+            {
+                "sub": key,
+                "decision": asdict(d),
+                "email": sub.get("email", ""),
+                "locality": sub.get("locality", ""),
+                "threshold_category": sub.get("threshold_category", ""),
+                "unsubscribe_token": sub.get("unsubscribe_token", ""),
+                "pm25_mid": round(pm25, 1),
+            }
+        )
     return {"alerts": decisions, "ok": True}
 
 
@@ -284,29 +305,53 @@ def publish_alerts(event: dict[str, Any]) -> dict[str, Any]:
 
     alerts = event.get("alerts", [])
     alerter = best_alerter(get_settings_for_pipeline())
+    settings = get_settings_for_pipeline()
     published = 0
+    skipped = 0
     for alert in alerts:
         if not alert.get("decision", {}).get("should_send"):
             continue
+        email = str(alert.get("email") or "")
+        # The message is composed from the subscriber's own record. It used to
+        # be composed from constants: every alert carried pm25 = 0.0 and an
+        # unsubscribe link pointing at dhuan-detective.example, so a delivered
+        # message would have been wrong and un-actionable.
+        locality = str(alert.get("locality") or "your point")
+        pm25_mid = float(alert.get("pm25_mid") or 0.0)
+        category = str(alert["decision"].get("band", "Unknown"))
+        unsub = str(alert.get("unsubscribe_token") or "")
+        if not email or not unsub:
+            # Without a token there is no way for the recipient to stop the
+            # alert, so sending one would be worse than sending none.
+            skipped += 1
+            logger.warning("alert_missing_email_or_token: %s", email or "<no email>")
+            continue
         subject, body = compose_message(
-            locality="Delhi-NCR",
-            pm25_mid=0.0,
-            pm25_low=0.0,
-            pm25_high=0.0,
-            category=alert["decision"].get("band", "Unknown"),
+            locality=locality,
+            pm25_mid=pm25_mid,
+            pm25_low=pm25_mid,
+            pm25_high=pm25_mid,
+            category=category,
             likely_category=None,
-            unsubscribe_url="https://dhuan-detective.example/unsubscribe",
+            unsubscribe_url=(
+                f"{settings.public_base_url.rstrip('/')}"
+                f"/v1/subscriptions/unsubscribe?token={unsub}"
+            ),
         )
+        # Locality must match the subscriber's FilterPolicy, which is applied
+        # lower-cased at subscribe time.
         message_id = alerter.publish(
-            locality="delhi-ncr",
-            email=alert.get("email", ""),
+            locality=locality.lower(),
+            email=email,
             subject=subject,
             body=body,
         )
         if message_id:
             published += 1
     record("PipelineAlertsPublished", published)
-    return {"published": published, "ok": True}
+    if skipped:
+        record("PipelineAlertsSkipped", skipped)
+    return {"published": published, "skipped": skipped, "ok": True}
 
 
 def get_settings_for_pipeline() -> Any:

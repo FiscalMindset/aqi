@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     dynamodb_table_feeds: str = "dhuan-feeds"
     dynamodb_table_subscriptions: str = "dhuan-subscriptions"
     s3_bucket: str = "dhuan-artifacts"
+    # Absolute base for links we put in emails (unsubscribe). Must be the real
+    # deployed origin: an email carrying a placeholder link cannot be acted on.
+    public_base_url: str = "https://vz7mjma8sj.execute-api.ap-south-1.amazonaws.com/staging"
     sns_topic_arn: str = ""
     # Direct SMTP delivery (used when SES/SNS email is not verified yet, and for
     # local runs). Secrets live in .env locally and SSM SecureString on AWS;

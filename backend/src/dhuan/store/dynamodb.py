@@ -248,6 +248,27 @@ class SubscriptionsStore:
     def delete(self, sub_id: str) -> None:
         self.table.delete_item(Key={"pk": f"sub#{sub_id}"})
 
+    def all_subscriptions(self) -> list[dict[str, Any]]:
+        """Every stored subscription, confirmed or not.
+
+        The alert evaluator used to query the GSI for the literal locality
+        "delhi-ncr", which is not what anybody subscribes under - subscriptions
+        are stored as the name the reader typed, e.g. "Ghevra". The query
+        therefore always returned nothing and no alert was ever evaluated.
+        Scanning by primary key is correct here: the table is small (one row per
+        subscriber-locality pair) and a scan needs no index.
+        """
+        items: list[dict[str, Any]] = []
+        kwargs: dict[str, Any] = {}
+        while True:
+            resp = self.table.scan(**kwargs)
+            items.extend(resp.get("Items", []))
+            last = resp.get("LastEvaluatedKey")
+            if not last:
+                break
+            kwargs["ExclusiveStartKey"] = last
+        return items
+
     def by_locality(self, locality: str) -> Iterable[dict[str, Any]]:
         resp = self.table.query(
             IndexName="locality-index",
