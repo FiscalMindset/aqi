@@ -32,7 +32,7 @@ describe("Subscribe", () => {
     await user.type(screen.getByTestId("sub-email"), "parent@example.com");
     await user.click(screen.getByTestId("sub-submit"));
     await waitFor(() => expect(screen.getByTestId("sub-message")).toBeDefined());
-    expect(screen.getByTestId("sub-message").textContent).toContain("confirmation");
+    expect(screen.getByTestId("sub-message").textContent).toMatch(/confirm/i);
   });
 
   it("surfaces an API problem response as an alert", async () => {

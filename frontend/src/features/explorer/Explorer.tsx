@@ -127,6 +127,7 @@ export function Explorer() {
           lat={point.lat}
           lon={point.lon}
           sources={sources.data?.sources ?? []}
+          stations={stations.data ?? []}
           windFromDeg={estimate.data?.weather?.wind_from_deg ?? null}
           onPick={selectPlace}
         />

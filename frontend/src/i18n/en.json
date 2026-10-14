@@ -80,17 +80,56 @@
   },
   "subscribe": {
     "title": "Air-quality alerts",
-    "intro": "Get an email when the estimated air at your locality crosses your chosen category.",
-    "email": "Email",
-    "locality": "Locality name",
-    "threshold": "Alert when air is",
+    "intro": "Tell us the exact point you care about. We email you once when our estimate for that point crosses the level you choose.",
+    "email": "Email address",
+    "locality": "Label for this place",
+    "threshold": "Email me when the air reaches",
     "submit": "Subscribe",
     "submitting": "Subscribing…",
-    "success": "Check your inbox: alerts start after confirmation.",
-    "idempotent": "You are already subscribed to this locality.",
+    "success": "Check your inbox and confirm. Alerts start once you click the link we send.",
+    "idempotent": "You are already subscribed to this point.",
     "unsubscribe": "Unsubscribe",
     "outsideError": "Alerts are available for Delhi-NCR only.",
-    "place": "Monitor this point"
+    "place": "Monitor this point",
+    "emailHint": "Only used to send these alerts. Every email carries an unsubscribe link.",
+    "localityHint": "Optional. We fill this in for you — change it only if you want the email to say something else.",
+    "pickFirst": "Choose where to watch",
+    "pickHint": "Tap the map, search for a locality, or share your current position.",
+    "useLocation": "Use my current location",
+    "locating": "Finding your location…",
+    "locUnavailable": "This browser cannot share your location. Tap the map or search instead.",
+    "locDenied": "Location permission was declined. Tap the map or search instead — both work.",
+    "locFailed": "Could not read your location. Tap the map or search instead.",
+    "locBlocked": "Location is blocked for this site. Allow it in your browser's site settings, then try again.",
+    "thresholdHint": "One email each time the estimate for your point crosses into this band or worse. The bands are the official CPCB categories.",
+    "current": "Right now at this point",
+    "willFire": "will send you an alert if it stays here",
+    "preview": "See the email first",
+    "previewing": "Rendering…",
+    "previewTitle": "The email you would receive",
+    "honestTitle": "What this is, and what it is not",
+    "honestModel": "Alerts fire on our estimate for your point, not on an official CPCB reading of that exact spot.",
+    "honestWindow": "The CPCB bands are defined on 24-hour averages. We compare them against an hourly estimate, so an alert is a heads-up, not an official classification.",
+    "honestPrivacy": "Your address is stored only to send these alerts, and every email contains a one-click unsubscribe.",
+    "honestRate": "At most one email per crossing. There is no daily summary.",
+    "bands": {
+      "Moderately Polluted": {
+        "range": "61 – 90 µg/m³",
+        "blurb": "Sensitive groups feel it first: children, older people and anyone with asthma."
+      },
+      "Poor": {
+        "range": "91 – 120 µg/m³",
+        "blurb": "Uncomfortable for everyone. Avoid long exertion outdoors."
+      },
+      "Very Poor": {
+        "range": "121 – 250 µg/m³",
+        "blurb": "Unhealthy for everyone. Keep windows shut, avoid the road."
+      },
+      "Severe": {
+        "range": "above 250 µg/m³",
+        "blurb": "Hazardous. Stay indoors, mask up outdoors, check on elderly relatives."
+      }
+    }
   },
   "how": {
     "title": "How Dhuan Detective works",
@@ -127,5 +166,13 @@
     "unavailable": "unavailable",
     "ok": "All systems nominal",
     "degraded": "Some feeds are degraded — estimates may be stale"
+  },
+  "picker": {
+    "searchPlaceholder": "e.g. Rohini, Karol Bagh, Lajpat Nagar",
+    "alertsFor": "Alerts for",
+    "now": "now",
+    "tapHint": "Click the map to move the point anywhere in Delhi-NCR, or search for a named locality. The alert fires for this exact location.",
+    "savedHeading": "Or choose from saved places",
+    "stationRead": "Estimated PM2.5 here"
   }
 }

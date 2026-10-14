@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Map as MlMap } from "maplibre-gl";
+import { useTranslation } from "react-i18next";
 import { allPlaces, searchPlaces, type Place } from "../../lib/places";
 import { api } from "../../lib/api";
 
@@ -39,6 +40,7 @@ export function LocationPicker({
   value: Place;
   onChange: (p: Place) => void;
 }) {
+  const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -47,36 +49,58 @@ export function LocationPicker({
   const [locating, setLocating] = useState(false);
   const [locNote, setLocNote] = useState<string | null>(null);
 
+  // Superseded by any newer point: a permission complaint must never survive
+  // alongside a selection that the user has since changed by another route.
+  useEffect(() => {
+    attempt.current += 1;
+    setLocating(false);
+    setLocNote(null);
+  }, [value.lat, value.lon]);
+
   /**
    * Let the browser supply the coordinates instead of making people find their
    * own locality in a list. The point is kept verbatim - never snapped to a
    * named place - because a person standing in Ghevra wants their own street,
    * not the centroid of the Ghevra locality.
    */
-  function useMyLocation(): void {
+  const attempt = useRef(0);
+
+  async function useMyLocation(): Promise<void> {
     if (!navigator.geolocation) {
-      setLocNote("This browser cannot share your location. Search or tap the map instead.");
+      setLocNote(t("subscribe.locUnavailable"));
       return;
+    }
+    // A permission the browser has blocked outright never prompts again, so
+    // telling the user to "allow it" is only useful if we know that is the state.
+    try {
+      const status = await navigator.permissions?.query({ name: "geolocation" });
+      if (status?.state === "denied" && navigator.permissions) {
+        setLocNote(t("subscribe.locBlocked"));
+        return;
+      }
+    } catch {
+      // Permissions API is unsupported in some browsers; fall through to the
+      // normal request, which will prompt or report the real reason.
     }
     setLocating(true);
     setLocNote(null);
+    const mine = ++attempt.current;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        // A newer attempt has already reported; drop this stale callback.
+        if (mine !== attempt.current) return;
         setLocating(false);
         const { latitude: lat, longitude: lon } = pos.coords;
         const nearest = nearestPlace(lat, lon);
         onChange({ name: `My location${nearest ? ` near ${nearest.name}` : ""}`, lat, lon });
       },
       (err) => {
+        if (mine !== attempt.current) return;
         setLocating(false);
         // GeolocationPositionError.PERMISSION_DENIED is 1 per spec. Compare the
         // code rather than err.PERMISSION_DENIED, which is not guaranteed to be
         // present on every implementation of the error object.
-        setLocNote(
-          err.code === 1
-            ? "Location permission denied. Search or tap the map instead - both work."
-            : "Could not read your location. Search or tap the map instead.",
-        );
+        setLocNote(err.code === 1 ? t("subscribe.locDenied") : t("subscribe.locFailed"));
       },
       { timeout: 10000, enableHighAccuracy: true },
     );
@@ -178,7 +202,7 @@ export function LocationPicker({
             <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
             <circle cx="12" cy="12" r="8" />
           </svg>
-          {locating ? "Finding your location…" : "Use my current location"}
+          {locating ? t("subscribe.locating") : t("subscribe.useLocation")}
         </button>
         {locNote && (
           <p role="status" data-testid="picker-location-note" className="mb-2 text-xs text-amber-200">
@@ -189,7 +213,7 @@ export function LocationPicker({
           data-testid="picker-search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="e.g. Rohini, Karol Bagh, Lajpat Nagar"
+          placeholder={t("picker.searchPlaceholder")}
           className="mt-1 w-full rounded bg-white/10 p-2 min-h-touch"
         />
       </label>
@@ -222,23 +246,22 @@ export function LocationPicker({
       )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-800/60 p-2.5 text-sm">
-        <span className="text-xs uppercase tracking-wide text-slate-400">Alerts for</span>
+        <span className="text-xs uppercase tracking-wide text-slate-400">{t("picker.alertsFor")}</span>
         <span className="font-medium" data-testid="picker-selection">
           {value.name}
         </span>
         {estimate && (
           <span className="ml-auto rounded-full bg-teal-500/15 px-2 py-0.5 text-xs text-teal-200">
-            now {estimate.mid.toFixed(0)} µg/m³ · {estimate.band}
+            {t("picker.now")} {estimate.mid.toFixed(0)} µg/m³ · {estimate.band}
           </span>
         )}
       </div>
       <p className="text-[11px] text-slate-500">
-        Click the map to move the point anywhere in Delhi-NCR, or search for a
-        named locality. The alert fires for this exact location.
+        {t("picker.tapHint")}
       </p>
 
       <label className="block text-sm">
-        Or choose from saved places
+        {t("picker.savedHeading")}
         <select
           data-testid="sub-place"
           value={value.name}
