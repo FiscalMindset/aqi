@@ -108,7 +108,7 @@ async def model_card() -> ModelCardOut:
 
 
 @router.get(
-    "/v1/model/versions",
+    "/model/versions",
     response_model=ModelVersionsOut,
     summary="Every retained model version and what it scored",
     response_description="Version registry, oldest first, with the current one marked.",

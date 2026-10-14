@@ -131,3 +131,15 @@ def test_artifact_paths_resolve_relative_to_the_backend_root(
         json.dumps({"current": "v1", "versions": [_entry("v1", "2026-10-01T00:00:00+00:00", 12.0)]})
     )
     assert mv.summary()[0]["artifact_present"] is True
+
+
+def test_the_versions_endpoint_is_reachable_at_its_documented_path() -> None:
+    """Regression: the route was declared '/v1/model/versions' on a router that
+    already carries prefix='/v1', producing '/v1/v1/model/versions'. Nothing
+    matched it, so the feature was dead in production while every other test
+    passed. A test that only checks the registry can never catch that."""
+    from dhuan.api.routers.model_card import router
+
+    paths = {getattr(r, "path", None) for r in router.routes}
+    assert "/v1/model/versions" in paths
+    assert "/v1/v1/model/versions" not in paths
