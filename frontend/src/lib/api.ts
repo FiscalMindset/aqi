@@ -43,6 +43,27 @@ export class ApiError extends Error {
   }
 }
 
+export interface ModelVersion {
+  version_id: string;
+  trained_utc: string;
+  n_rows: number;
+  n_stations: number | null;
+  snapshot_sha256: string;
+  conformal_radius_ugm3: number | null;
+  temporal_mae: number | null;
+  temporal_rmse: number | null;
+  temporal_r2: number | null;
+  unseen_mae: number | null;
+  baseline_mae: number | null;
+  git_commit: string | null;
+  artifact_present: boolean;
+}
+
+export interface ModelVersions {
+  current: string | null;
+  versions: ModelVersion[];
+}
+
 export interface CrossCheck {
   pm25_ugm3: number | null;
   us_aqi: number | null;
@@ -457,6 +478,7 @@ export const api = {
       }),
     }),
   model: () => request<ModelCard>("/model"),
+  modelVersions: () => request<ModelVersions>("/model/versions"),
   validation: () => request<ValidationMetrics>("/validation"),
   status: () => request<StatusResponse>("/status"),
   subscribe: (body: {

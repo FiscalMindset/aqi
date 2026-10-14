@@ -184,5 +184,9 @@
     "notAReading": "This is a model, not a monitor at your address.",
     "unavailable": "No independent reading available right now.",
     "dustNote": "Delhi's dust season is strong right now, so the aerosol reading includes dust — it is not fire smoke."
+  },
+  "versions": {
+    "title": "Every model version we kept",
+    "explainer": "Each retrain is kept, not overwritten, so a change in accuracy is visible rather than silent. A version marked pruned still lists the commit that produced it, so the model can be recovered from history. MAE is measured at training time on that version's own holdout."
   }
 }

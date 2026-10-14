@@ -12,12 +12,14 @@ import { AgentTrace } from "./AgentTrace";
 import { ExplanationPanel } from "./ExplanationPanel";
 import { WindPanel } from "./WindPanel";
 import { CrossCheck } from "./CrossCheck";
+import { ModelVersionsPanel } from "./ModelVersions";
 import { TrainingDataPanel } from "../methodology/TrainingDataPanel";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
   useEstimate,
   useExplain,
   useModelCard,
+  useModelVersions,
   useSources,
   useStations,
 } from "../../hooks/useApi";
@@ -50,6 +52,7 @@ export function Explorer() {
 
   const estimate = useEstimate(point.lat, point.lon);
   const stations = useStations(point.lat, point.lon);
+  const modelVersions = useModelVersions();
   const sources = useSources(point.lat, point.lon);
   const explain = useExplain(point.lat, point.lon);
   const modelCard = useModelCard();
@@ -66,6 +69,7 @@ export function Explorer() {
       {estimate.data?.cross_check && (
         <CrossCheck data={estimate.data.cross_check} ourPm25={estimate.data.pm25_mid} />
       )}
+      <ModelVersionsPanel data={modelVersions.data ?? null} />
       {estimate.data && (
         <FeatureBreakdown
           features={estimate.data.features_used}

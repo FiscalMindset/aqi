@@ -3,6 +3,7 @@ import {
   api,
   type Estimate,
   type ModelCard,
+  type ModelVersions,
   type RouteComparison,
   type SourcesResponse,
   type StationReading,
@@ -83,6 +84,14 @@ export function useModelCard(): UseQueryResult<ModelCard, Error> {
   return useQuery({
     queryKey: ["model-card"],
     queryFn: api.model,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+export function useModelVersions(): UseQueryResult<ModelVersions, Error> {
+  return useQuery({
+    queryKey: ["model-versions"],
+    queryFn: api.modelVersions,
     staleTime: 60 * 60 * 1000,
   });
 }
