@@ -20,7 +20,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as MlMap, MapMouseEvent } from "maplibre-gl";
+import type { Map as MlMap } from "maplibre-gl";
+import type maplibregl from "maplibre-gl";
+
+type MapLibreStatic = typeof maplibregl;
 import type { SourceHit } from "../../lib/api";
 
 const UPWIND = "#f97316"; // orange - can reach you
@@ -75,7 +78,11 @@ export function SourceMap({
   const mapRef = useRef<MlMap | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [hovered, setHovered] = useState<number | null>(null);
+  const mlRef = useRef<MapLibreStatic | null>(null);
+  const sourcesRef = useRef<SourceHit[]>(sources);
+  sourcesRef.current = sources;
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
 
   useEffect(() => {
     let disposed = false;
@@ -84,6 +91,7 @@ export function SourceMap({
       try {
         const maplibregl = (await import("maplibre-gl")).default;
         await import("maplibre-gl/dist/maplibre-gl.css");
+        mlRef.current = maplibregl;
         if (disposed || !container.current) return;
         map = new maplibregl.Map({
           container: container.current,
@@ -105,30 +113,52 @@ export function SourceMap({
         });
         map.addControl(new maplibregl.NavigationControl(), "top-right");
         map.on("error", () => setFailed(true));
+
+        // ONE handler, bound when the map is created, that hit-tests the layers
+        // itself. Layer-delegated listeners are the fragile path: MapLibre
+        // drops them if the layer is missing at bind time, and they were being
+        // skipped by an early return on every re-render. A single map-level
+        // listener that calls queryRenderedFeatures has neither problem.
+        map.on("click", (e) => {
+          const hits = live.queryRenderedFeatures(e.point, {
+            layers: ["source-dots", "source-halo"],
+          });
+          if (!hits.length) {
+            onPickRef.current(e.lngLat.lat, e.lngLat.lng);
+            return;
+          }
+          const f = hits[0]!;
+          if (f.geometry.type !== "Point") return;
+          // GeoJSON properties are flat and renamed for the paint expressions,
+          // so map them back onto the API shape rather than assuming they match.
+          const raw = f.properties as unknown as Record<string, unknown>;
+          const props: SourceHit = {
+            osm_id: String(raw.osm_id ?? ""),
+            type: String(raw.type ?? "other"),
+            name: String(raw.name ?? ""),
+            latitude: 0,
+            longitude: 0,
+            distance_km: Number(raw.distance_km ?? 0),
+            bearing_deg: Number(raw.bearing_deg ?? 0),
+            influence_score: Number(raw.influence ?? 0),
+            in_upwind_cone: raw.in_upwind === true || raw.in_upwind === "true",
+            area_m2: raw.area_m2 == null ? null : Number(raw.area_m2),
+            attribution: "",
+          };
+          new maplibregl.Popup({ offset: 14, maxWidth: "290px" })
+            .setLngLat(f.geometry.coordinates as [number, number])
+            .setHTML(popupHtml(props))
+            .addTo(live);
+        });
+        map.on("mousemove", (e) => {
+          const over = live.queryRenderedFeatures(e.point, {
+            layers: ["source-dots", "source-halo"],
+          }).length > 0;
+          live.getCanvas().style.cursor = over ? "pointer" : "";
+        });
         mapRef.current = map;
         map.once("load", () => setReady(true));
         if (map.loaded()) setReady(true);
-
-        // Cursor feedback: a clickable dot must look clickable.
-        map.on("mouseenter", "source-dots", () => {
-          map!.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", "source-dots", () => {
-          map!.getCanvas().style.cursor = "";
-          setHovered(null);
-        });
-        map.on("click", "source-dots", (e) => {
-          const f = e.features?.[0];
-          if (!f || f.geometry.type !== "Point") return;
-          const s = f.properties as unknown as SourceHit;
-          const [lng, la] = (f.geometry as GeoJSON.Point).coordinates as [number, number];
-          const popup = new maplibregl.Popup({ offset: 14, maxWidth: "280px" })
-            .setLngLat([lng, la])
-            .setHTML(popupHtml(s))
-            .addTo(map!);
-          e.preventDefault();
-          void popup;
-        });
 
         const live = map;
         const el = container.current;
@@ -154,6 +184,7 @@ export function SourceMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
+    void (async () => {
     const geojson: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
       features: sources.map((s, i) => ({
@@ -175,6 +206,9 @@ export function SourceMap({
     };
     const src = map.getSource("sources") as import("maplibre-gl").GeoJSONSource | undefined;
     if (src) {
+      // The layers already exist: just refresh the data. Returning here is what
+      // broke the popups - the click handlers were bound below this point, so
+      // every re-render skipped them and the dots stopped responding entirely.
       src.setData(geojson);
       return;
     }
@@ -231,12 +265,9 @@ export function SourceMap({
         "circle-stroke-color": "#0f172a",
       },
     });
-    map.on("click", (e: MapMouseEvent) => {
-      // clicking empty ground re-centres; source clicks stopPropagation above
-      if (map.queryRenderedFeatures(e.point, { layers: ["source-dots"] }).length) return;
-      onPick(e.lngLat.lat, e.lngLat.lng);
-    });
-  }, [sources, ready, lat, lon, onPick]);
+    })().catch((err) => console.error("source layer setup failed", err));
+  }, [sources, ready, lat, lon]);
+
 
   useEffect(() => {
     const map = mapRef.current;
@@ -299,12 +330,28 @@ export function SourceMap({
           <p className="text-[10px] text-slate-400">Wind from the {compass(windFromDeg)}.</p>
         )}
       </div>
-      {hovered !== null && <span className="sr-only">source {hovered}</span>}
     </div>
   );
 }
 
-function popupHtml(s: SourceHit): string {
+function popupHtml(raw: SourceHit): string {
+  // GeoJSON serialises feature properties to strings, so every numeric field
+  // arrives as "1.5" or even "" for a null. Coerce once here instead of
+  // letting toFixed throw on undefined - which it did, silently killing the
+  // popup and leaving a dot that looked dead.
+  const num = (v: unknown, fallback = 0) => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const s: SourceHit = {
+    ...raw,
+    distance_km: num(raw.distance_km),
+    bearing_deg: num(raw.bearing_deg),
+    influence_score: num(raw.influence_score),
+    area_m2: raw.area_m2 == null ? null : num(raw.area_m2),
+    name: String(raw.name ?? ""),
+    type: String(raw.type ?? "other"),
+  };
   const up = s.in_upwind_cone;
   const link = osmLink(s.osm_id);
   const area =
@@ -313,12 +360,16 @@ function popupHtml(s: SourceHit): string {
       : "";
   return `
     <div style="font-family:system-ui,sans-serif;font-size:12px;line-height:1.5;color:#0f172a">
-      <div style="font-weight:600;font-size:13px;margin-bottom:2px">${
-        s.name && s.name !== TYPE_LABEL[s.type]
-          ? escapeHtml(s.name)
-          : escapeHtml(TYPE_LABEL[s.type] ?? "Emission source")
-      }</div>
-      <div style="color:#475569;margin-bottom:6px">${escapeHtml(TYPE_LABEL[s.type] ?? "")}</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:2px">${escapeHtml(
+        s.name && s.name !== s.type && s.name.toLowerCase() !== TYPE_LABEL[s.type]?.toLowerCase()
+          ? s.name
+          : (TYPE_LABEL[s.type] ?? "Emission source"),
+      )}</div>
+      <div style="color:#475569;margin-bottom:6px">${escapeHtml(
+        s.name && s.name.toLowerCase() !== TYPE_LABEL[s.type]?.toLowerCase()
+          ? (TYPE_LABEL[s.type] ?? "")
+          : "",
+      )}</div>
       <div><b>${s.distance_km.toFixed(2)} km</b> away, to the ${compass(s.bearing_deg)}</div>
       <div>Influence score <b>${s.influence_score.toFixed(2)}</b> / 1.00</div>
       ${area}
