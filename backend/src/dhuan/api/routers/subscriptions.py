@@ -85,11 +85,32 @@ async def create_subscription(
         raise _store_unavailable(exc) from exc
     if existing is not None:
         record("SubscriptionIdempotentHit", 1)
-        status = "already_subscribed" if existing.get("confirmed") else "pending_confirmation"
+        confirmed = bool(existing.get("confirmed"))
+        status = "already_subscribed" if confirmed else "pending_confirmation"
+        # Retry the SNS subscription for anything still unconfirmed. A record
+        # stored while the topic ARN was unwired has no SNS subscription behind
+        # it and would otherwise stay pending forever with no way out, because
+        # the only thing that could have fixed it was the create path this
+        # branch skips. Subscribing an already-pending address is a no-op.
+        sent = False
+        if not confirmed:
+            sent = _request_sns_confirmation(settings, body.email, body.locality, token)
         return {
             "id": sub_id,
             "status": status,
             "locality": existing.get("locality"),
+            "confirmation_sent": sent,
+            "confirmation": (
+                "This point is already subscribed and confirmed."
+                if confirmed
+                else (
+                    "Still waiting on your confirmation. A fresh confirmation "
+                    "email has been requested."
+                    if sent
+                    else "Still waiting on your confirmation, but this "
+                    "deployment cannot send one."
+                )
+            ),
         }
     try:
         store.create(

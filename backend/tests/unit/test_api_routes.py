@@ -330,3 +330,51 @@ def test_prefixed_deep_link_serves_the_spa_shell(monkeypatch: pytest.MonkeyPatch
                 assert "text/html" in resp.headers["content-type"], path
     config.get_settings.cache_clear()
     _ = shutil
+
+
+class TestSubscriptionConfirmationIsNotFaked:
+    """The confirmation email used to be reported as sent when nothing was sent.
+
+    SNS_TOPIC_ARN was only a CloudFormation Output, so the topic was unreachable
+    at runtime, subscribing the address was a no-op, and the response still said
+    "a confirmation email has been sent". Someone waiting on that email would
+    wait forever.
+    """
+
+    def test_reports_honestly_when_the_topic_is_unreachable(
+        self, api: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from dhuan.api.routers import subscriptions as sub_mod
+        from dhuan.core import config
+
+        # No DynamoDB in unit tests; stub the store so we exercise the response.
+        class FakeStore:
+            def __init__(self, *a: object, **k: object) -> None:
+                pass
+
+            def make_id(self, email: str, locality: str) -> str:
+                return "stub"
+
+            def get(self, _id: str) -> None:
+                return None
+
+            def create(self, **kwargs: object) -> None:
+                return None
+
+        monkeypatch.setattr(sub_mod, "SubscriptionsStore", FakeStore)
+        settings = config.get_settings()
+        monkeypatch.setattr(settings, "sns_topic_arn", "")
+        res = api.post(
+            "/v1/subscriptions",
+            json={
+                "email": "nobody@example.com",
+                "locality": "Ghevra",
+                "lat": 28.4726,
+                "lon": 77.1714,
+                "threshold_category": "Poor",
+            },
+        )
+        assert res.status_code == 201
+        body = res.json()
+        assert body["confirmation_sent"] is False
+        assert "could not be sent" in body["confirmation"]
