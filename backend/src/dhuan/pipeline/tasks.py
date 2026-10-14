@@ -126,6 +126,13 @@ def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
     Uses the model artifact; when it is missing the task returns ok=False so
     the state machine can skip persistence honestly instead of storing
     invented values.
+
+    Only the cells that a subscriber actually cares about are returned in the
+    task result. Step Functions caps a single task result at 256 KB and the
+    full NCR grid is ~46,750 cells (~4 MB), so returning the whole grid failed
+    every run with States.DataLimitExceeded: no estimate was ever persisted and
+    no alert was ever evaluated. All cells are still written to DynamoDB here;
+    only the subscriber-relevant subset travels through the state machine.
     """
     from dhuan.geo.grid import cell_center, grid_cells
 
@@ -203,7 +210,58 @@ def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
             }
         )
     record("PipelinePredictions", len(predictions))
-    return {"predictions": predictions, "ok": True}
+
+    # Persist every cell here. This used to be handed to the next task through
+    # Step Functions state, which cannot carry it: 46,750 predictions is roughly
+    # 4 MB against a 256 KB task-result limit, so predict_grid failed on every
+    # single run and the pipeline stopped before alerts were ever considered.
+    store = EstimatesStore()
+    written = 0
+    for pr in predictions:
+        store.put_estimate(
+            pr["cell"],
+            datetime.fromisoformat(pr["ts"]),
+            float(pr["pm25_low"]),
+            float(pr["pm25_mid"]),
+            float(pr["pm25_high"]),
+            "pipeline",
+        )
+        written += 1
+    record("PipelinePersisted", written)
+
+    # Only cells a subscriber cares about go back through the state machine.
+    try:
+        wanted = _subscribed_cells()
+    except Exception as exc:
+        logger.warning("subscribed_cells_unavailable: %s", type(exc).__name__)
+        wanted = set()
+
+    relevant = [p_ for p_ in predictions if p_["cell"] in wanted]
+    record("PipelinePredictionsReturned", len(relevant))
+    return {
+        "predictions": relevant,
+        "ok": True,
+        "total_cells": len(predictions),
+        "persisted": written,
+    }
+
+
+def _subscribed_cells() -> set[str]:
+    """H3 cells containing at least one subscription.
+
+    Scanning the whole subscriber table per hour is fine: it is one item per
+    subscriber-locality pair, not a grid walk.
+    """
+    from dhuan.geo.grid import cell_for_point
+    from dhuan.store.dynamodb import SubscriptionsStore
+
+    cells: set[str] = set()
+    for sub in SubscriptionsStore().all_subscriptions():
+        lat, lon = sub.get("lat"), sub.get("lon")
+        if lat is None or lon is None:
+            continue
+        cells.add(cell_for_point(Point(float(lat), float(lon))))
+    return cells
 
 
 def _latest_station_value() -> float | None:

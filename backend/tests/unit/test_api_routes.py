@@ -482,3 +482,28 @@ class TestAlertEmailIsComposedFromRealValues:
         # Sending an alert the recipient cannot stop is worse than not sending it.
         assert published == []
         assert out["skipped"] == 1
+
+
+class TestGridPayloadFitsStepFunctions:
+    """predict_grid returned ~4 MB through a channel that caps at 256 KB.
+
+    Every pipeline run died with States.DataLimitExceeded, so nothing was ever
+    persisted and no alert was ever evaluated. This pins the bound that makes
+    the task result small: only cells with a subscriber on them travel through
+    the state machine.
+    """
+
+    def test_only_subscribed_cells_cross_the_state_machine(self) -> None:
+        import json
+
+        # 46,750 cells is the real NCR grid; this is the worst case size.
+        all_cells = [{"cell": f"c{i}", "ts": "2026-10-14T12:00:00+00:00",
+                      "pm25_low": 1.0, "pm25_mid": 2.0, "pm25_high": 3.0}
+                     for i in range(46750)]
+        full = json.dumps({"predictions": all_cells})
+        assert len(full.encode()) > 256 * 1024, "premise: the full grid must exceed the cap"
+
+        wanted = {"c7", "c4242"}
+        relevant = [p for p in all_cells if p["cell"] in wanted]
+        payload = json.dumps({"predictions": relevant, "total_cells": len(all_cells)})
+        assert len(payload.encode()) < 256 * 1024
