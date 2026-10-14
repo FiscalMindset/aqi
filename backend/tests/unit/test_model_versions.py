@@ -63,8 +63,13 @@ def test_version_id_differs_when_the_snapshot_changes() -> None:
     assert mv.version_id_for("aaaa1111", when) != mv.version_id_for("bbbb2222", when)
 
 
-def test_registry_survives_a_missing_or_corrupt_file(tmp_path: Path) -> None:
+def test_registry_survives_a_missing_or_corrupt_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Must be pointed at a temp registry: reading the real one made this test
+    # pass only while no retrain had ever run, and fail the moment one did.
     reg = tmp_path / "versions.json"
+    monkeypatch.setattr(mv, "REGISTRY", reg)
     assert mv.load_registry() == {"current": None, "versions": []}
     reg.write_text("{ not json")
     assert mv.load_registry() == {"current": None, "versions": []}
@@ -104,3 +109,25 @@ def test_a_pruned_artifact_explains_where_to_recover_it(fake_registry: Path) -> 
     with pytest.raises(FileNotFoundError) as caught:
         mv.load_artifact_version("v1")
     assert "abc1234" in str(caught.value)
+
+
+def test_artifact_paths_resolve_relative_to_the_backend_root(
+    fake_registry: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: paths were resolved one directory too high.
+
+    ARTIFACTS is backend/models and a registry row stores
+    'models/versions/<id>.pkl', so the row resolves against backend/ - not
+    against backend's parent. The off-by-one made every retained artifact look
+    absent, and the version table reported no metrics at all instead of
+    failing loudly.
+    """
+    # _BACKEND is the dir containing "models/", so mirror that layout.
+    backend = fake_registry.parent / "backend"
+    (backend / "models" / "versions").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(mv, "_BACKEND", backend)
+    (backend / "models" / "versions" / "v1.pkl").write_bytes(b"x")
+    fake_registry.joinpath("versions.json").write_text(
+        json.dumps({"current": "v1", "versions": [_entry("v1", "2026-10-01T00:00:00+00:00", 12.0)]})
+    )
+    assert mv.summary()[0]["artifact_present"] is True

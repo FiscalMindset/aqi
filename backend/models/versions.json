@@ -1,0 +1,70 @@
+{
+  "current": "20261014T155128Z-c7836258",
+  "versions": [
+    {
+      "version_id": "20261012T123500Z-c7836258",
+      "trained_utc": "2026-10-12T12:35:00+00:00",
+      "snapshot_sha256": "c7836258415ae075b78a42495f23025871f36047348589588e039da60152ab7a",
+      "n_rows": 591372,
+      "n_stations": 73,
+      "n_features": 27,
+      "conformal_radius_ugm3": 15.0,
+      "delta_clip": 46.0,
+      "winner": "quantile-model",
+      "temporal_holdout": {
+        "mae": 11.116,
+        "rmse": 26.291,
+        "r2": 0.535
+      },
+      "unseen_station": {
+        "mae": 10.58,
+        "rmse": 21.65,
+        "r2": 0.566
+      },
+      "baselines": {
+        "persistence-lag1h": 11.64
+      },
+      "artifact": "models/versions/20261012T123500Z-c7836258.pkl",
+      "git_commit": "b23e9f0",
+      "note": "Recorded BEFORE the delta-clip fix. Its temporal MAE was measured on an unclipped variant of the model that never reached a reader; a fresh measurement of this same artifact, scored the way the API serves it, gives MAE 9.92. Use the --compare output, not this row, when comparing."
+    },
+    {
+      "version_id": "20261014T155128Z-c7836258",
+      "trained_utc": "2026-10-14T15:51:28+00:00",
+      "snapshot_sha256": "c7836258415ae075b78a42495f23025871f36047348589588e039da60152ab7a",
+      "n_rows": 591372,
+      "n_stations": 73,
+      "n_features": 27,
+      "conformal_radius_ugm3": 15.0,
+      "delta_clip": 46.0,
+      "winner": "quantile-model",
+      "temporal_holdout": {
+        "n_train": 473041.0,
+        "n_test": 118331.0,
+        "mae": 11.2137,
+        "rmse": 26.6093,
+        "r2": 0.5232,
+        "bias": 0.0382,
+        "coverage80": 0.3675,
+        "mean_width": 12.6111
+      },
+      "unseen_station": {
+        "n_train": 517450.0,
+        "n_test": 591372.0,
+        "mae": 10.7302,
+        "rmse": 22.096,
+        "r2": 0.5487,
+        "bias": 0.411,
+        "coverage80": 0.4111,
+        "mean_width": 14.5395
+      },
+      "baselines": {
+        "global-mean": 27.1486,
+        "per-station-climatology": 27.2774,
+        "persistence-lag1h": 11.6361
+      },
+      "artifact": "models/versions/20261014T155128Z-c7836258.pkl",
+      "git_commit": "b23e9f0"
+    }
+  ]
+}

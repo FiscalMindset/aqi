@@ -27,6 +27,8 @@ from typing import Any
 ARTIFACTS = Path(__file__).resolve().parents[3] / "models"
 VERSIONS_DIR = ARTIFACTS / "versions"
 REGISTRY = ARTIFACTS / "versions.json"
+# Registry rows store paths relative to the backend package root.
+_BACKEND = ARTIFACTS.parent
 
 # Cap the on-disk pile. Models stop being useful for explanation long before
 # they stop being large; the registry keeps the full history regardless.
@@ -114,7 +116,7 @@ def _prune(entries: list[dict[str, Any]]) -> None:
     if len(entries) <= KEEP_ARTIFACTS:
         return
     for old in entries[: len(entries) - KEEP_ARTIFACTS]:
-        path = ARTIFACTS.parent.parent / old["artifact"]
+        path = _BACKEND / old["artifact"]
         try:
             path.unlink()
         except OSError:
@@ -143,7 +145,7 @@ def load_artifact_version(version_id: str) -> dict[str, Any]:
     """Load a retained artifact by id. Raises if it has been pruned."""
     for entry in load_registry()["versions"]:
         if entry["version_id"] == version_id:
-            path = ARTIFACTS.parent.parent / entry["artifact"]
+            path = _BACKEND / entry["artifact"]
             if not path.exists():
                 raise FileNotFoundError(
                     f"artifact for {version_id} was pruned; retrieve it from git "
@@ -175,7 +177,7 @@ def summary() -> list[dict[str, Any]]:
                 "unseen_mae": e["unseen_station"].get("mae"),
                 "baseline_mae": e.get("baselines", {}).get("persistence-lag1h"),
                 "git_commit": e.get("git_commit"),
-                "artifact_present": (ARTIFACTS.parent.parent / e["artifact"]).exists(),
+                "artifact_present": (_BACKEND / e["artifact"]).exists(),
             }
         )
     return out
