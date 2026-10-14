@@ -13,7 +13,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}/frontend"
 
 BASE_PATH="${VITE_BASE_PATH:-/}"
-BUILD_ID="${BUILD_ID:-$(git rev-parse --short HEAD 2>/dev/null || echo "local-$(date +%s)")}"
+HEAD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo none)"
+BUILD_ID="${BUILD_ID:-${HEAD_SHA}}"
+
+# Fail loudly rather than ship a stamp that lies. The build id is what a browser
+# compares against the deployed version.json to decide it is running stale code,
+# so a stamp from a different commit makes that check meaningless - and it is
+# easy to hit by building before committing.
+if [ "${REQUIRE_BUILD_MATCH:-0}" = "1" ] && [ -n "$(git status --porcelain -- frontend scripts)" ]; then
+  echo "ERROR: frontend/scripts have uncommitted changes but REQUIRE_BUILD_MATCH=1." >&2
+  echo "       Commit first so the build id matches the shipped code." >&2
+  exit 1
+fi
 
 if [ "${BASE_PATH}" = "/" ] && [ "${REQUIRE_BASE:-0}" != "1" ]; then
   echo "    (no VITE_BASE_PATH set: assets will be referenced from / - correct for"
