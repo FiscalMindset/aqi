@@ -459,6 +459,21 @@ Resources:
             TableName: !Ref EstimatesTable
         - DynamoDBCrudPolicy:
             TableName: !Ref FeedsTable
+        # The alert evaluator reads every subscription by primary key. The
+        # locality GSI is useless for that, because subscribers register under
+        # the name they typed ("Ghevra") rather than a fixed region key. Scan is
+        # scoped to this one table; the table holds one row per
+        # subscriber-locality pair, so it stays small.
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt SubscriptionsTable.Arn
         # The pipeline resolves the same settings as the API, including the
         # secrets in SSM. Without this the FIRMS key read as unset *in the
         # pipeline only*: /ready moved to "stale" while every ingest run still
