@@ -242,3 +242,42 @@ def test_the_committed_index_exists_and_is_real() -> None:
     assert values
     assert all(0.0 <= float(v) <= 1000.0 for v in values)
     assert provenance.get("newest_observation")
+
+
+class TestNoStationInRangeIsNotAMissingCredential:
+    """A coverage gap must not be reported as a missing API key.
+
+    With no OpenAQ credential the service falls back to the public archive. If
+    the archive also has nothing near the requested point, the old code fell
+    through to the live client and raised "Feed not configured: OpenAQ" with a
+    503 - telling someone whose point merely sits beyond the monitors that a
+    credential was missing, which is both wrong and unactionable.
+    """
+
+    def _no_archive(self, monkeypatch):
+        from dhuan.api import services
+
+        monkeypatch.setattr(services, "archive_readings", lambda lat, lon: None)
+
+    def test_reports_a_coverage_gap_not_a_missing_key(self, monkeypatch):
+        import asyncio
+
+        import pytest
+
+        from dhuan.api import services
+        from dhuan.api.errors import Problem
+        from dhuan.core.config import get_settings
+
+        self._no_archive(monkeypatch)
+        settings = get_settings()
+        assert not settings.openaq_api_key, "test assumes no credential configured"
+
+        with pytest.raises(Problem) as caught:
+            asyncio.run(services.stations_near(26.9, 76.9))
+
+        problem = caught.value
+        assert problem.status == 404
+        assert "monitor" in problem.detail.lower()
+        assert "credential" not in problem.title.lower()
+        assert "openaq" not in problem.title.lower()
+        assert "26.9000" in problem.detail and "76.9000" in problem.detail

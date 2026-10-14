@@ -17,7 +17,7 @@ from dhuan.api.deps import (
     get_weather,
     get_weather_cache,
 )
-from dhuan.api.errors import not_configured_problem, upstream_problem
+from dhuan.api.errors import no_station_in_range_problem, not_configured_problem, upstream_problem
 from dhuan.core.config import Settings, get_settings
 from dhuan.core.http import UpstreamError
 from dhuan.core.logging import get_logger, log_event
@@ -36,6 +36,8 @@ from dhuan.model.cpcb import category_for_pm25
 logger = get_logger("api.services")
 
 STATION_TTL_SECONDS = 900.0
+# Must match the archive lookup radius, so the error quotes the real limit.
+STATION_RADIUS_KM = 25.0
 WEATHER_TTL_SECONDS = 1800.0
 
 # Archive readings are as old as the daily files OpenAQ publishes. Beyond this
@@ -102,15 +104,24 @@ async def stations_near(
         if outcome is not None:
             record("FeedStationsArchiveServed", 1)
             return outcome
+        # No credential AND nothing in the archive near this point. Falling
+        # through to the live client here produced "Feed not configured: OpenAQ"
+        # with a 503, which blamed a missing API key for what is actually a
+        # coverage gap. Say what is really wrong instead.
+        record("FeedStationsNoStationInRange", 1)
+        raise no_station_in_range_problem(lat, lon, STATION_RADIUS_KM)
 
     try:
         value, age, stale = await cache.get_or_fetch(key, fetch, ttl_seconds=STATION_TTL_SECONDS)
         record("FeedStationsServed", 1)
         return FeedOutcome(value, age, stale, ok=True)
     except NotConfiguredError as exc:
+        # A key exists but the client reports it unusable: prefer the archive.
         record("FeedStationsMissingConfig", 1)
-        if archive_readings(lat, lon) is not None:  # pragma: no cover - defensive
-            raise
+        fallback = archive_readings(lat, lon)
+        if fallback is not None:
+            logger.warning("openaq_unconfigured_serving_archive: %s", exc)
+            return fallback
         raise not_configured_problem("OpenAQ") from exc
     except UpstreamError as exc:
         record("FeedStationsFailed", 1)

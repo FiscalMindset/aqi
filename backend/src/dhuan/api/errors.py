@@ -115,6 +115,26 @@ def not_configured_problem(source: str) -> Problem:
     )
 
 
+def no_station_in_range_problem(lat: float, lon: float, radius_km: float) -> Problem:
+    """No monitor within range of the requested point.
+
+    Distinct from a missing credential on purpose. Returning "Feed not
+    configured" here told someone whose point simply sits beyond the monitors
+    that a credential was missing, which is both wrong and unactionable.
+    """
+    return Problem(
+        problem_type=ProblemType.NOT_FOUND,
+        title="No monitoring station near this point",
+        status=404,
+        detail=(
+            f"No CPCB/OpenAQ monitor within {radius_km:g} km of "
+            f"{lat:.4f}, {lon:.4f}. Coverage is centred on the Delhi-NCR "
+            "network; outside it there is no real reading to anchor an estimate "
+            "to, and none is invented."
+        ),
+    )
+
+
 def not_found_problem(what: str) -> Problem:
     return Problem(
         problem_type=ProblemType.NOT_FOUND,
