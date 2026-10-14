@@ -183,6 +183,34 @@ class ModelCardOut(BaseModel):
     notes: list[str]
 
 
+class ModelVersionOut(BaseModel):
+    """One retained model version, for comparing retrains.
+
+    Exposed so "the model changed" is answerable from the product rather than
+    from a shell history: which version is live, what it scored, whether its
+    artifact is still on disk, and which commit produced it.
+    """
+
+    version_id: str
+    trained_utc: str
+    n_rows: int
+    n_stations: int | None = None
+    snapshot_sha256: str
+    conformal_radius_ugm3: float | None = None
+    temporal_mae: float | None = None
+    temporal_rmse: float | None = None
+    temporal_r2: float | None = None
+    unseen_mae: float | None = None
+    baseline_mae: float | None = None
+    git_commit: str | None = None
+    artifact_present: bool = True
+
+
+class ModelVersionsOut(BaseModel):
+    current: str | None = None
+    versions: list[ModelVersionOut]
+
+
 class ValidationOut(BaseModel):
     """Metrics exactly as produced by model/evaluate.py."""
 

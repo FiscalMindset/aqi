@@ -26,6 +26,7 @@ from dhuan.model.features import (
     load_snapshot,
     snapshot_hash,
 )
+from dhuan.model.versions import _record_version
 
 ARTIFACTS = Path(__file__).resolve().parents[3] / "models"
 DATA = Path(__file__).resolve().parents[3] / "data"
@@ -398,6 +399,13 @@ def evaluate(train: bool = True, save: bool = True) -> Evaluation:
         }
         with (ARTIFACTS / "model.pkl").open("wb") as f:
             pickle.dump(payload, f)
+
+        # Keep the artifact, not just the number. Overwriting a single model.pkl
+        # means "the model got worse" is indistinguishable from "the model
+        # changed" - you cannot go back and find out why. Each retrain is stored
+        # under a version id and recorded in a registry, so any past model can be
+        # re-evaluated on the current data and the change explained.
+        _record_version(payload, evaluation, conformal_r)
         (ARTIFACTS / "metrics.json").write_text(
             json.dumps(asdict(evaluation), indent=2, default=str)
         )

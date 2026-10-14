@@ -14,7 +14,12 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from dhuan.api.models import ModelCardOut, ModelMetrics
+from dhuan.api.models import (
+    ModelCardOut,
+    ModelMetrics,
+    ModelVersionOut,
+    ModelVersionsOut,
+)
 
 router = APIRouter(prefix="/v1", tags=["model"])
 
@@ -100,3 +105,30 @@ async def model_card() -> ModelCardOut:
         conformal_radius_ugm3=radius,
         notes=list(data.get("notes") or []),
     )
+
+
+@router.get(
+    "/v1/model/versions",
+    response_model=ModelVersionsOut,
+    summary="Every retained model version and what it scored",
+    response_description="Version registry, oldest first, with the current one marked.",
+)
+def model_versions() -> ModelVersionsOut:
+    """Retained model versions, newest last.
+
+    Reading from a registry rather than a single metrics file means a retrain
+    that made the model worse is visible instead of overwritten. `artifact_present`
+    is false once the pickle has been pruned; the registry row and the commit
+    that produced it remain, so the model can still be recovered from git.
+    """
+    from dhuan.model.versions import summary
+
+    reg = summary()
+    current = None
+    try:
+        from dhuan.model.versions import load_registry
+
+        current = load_registry().get("current")
+    except Exception:
+        current = None
+    return ModelVersionsOut(current=current, versions=[ModelVersionOut(**v) for v in reg])

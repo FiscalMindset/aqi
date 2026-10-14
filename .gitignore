@@ -56,3 +56,9 @@ localstack_data/
 service-account*.json
 # copy of the root aws_journey.md, kept in sync for the docs build
 backend/.env
+
+# Retained model artifacts. A model is ~6 MB; committing every retrain would
+# bury the source history under binaries. The registry (models/versions.json)
+# IS tracked, and each row records the commit that produced the model, so a
+# pruned version is still recoverable with `git show <commit>:backend/models/model.pkl`.
+backend/models/versions/

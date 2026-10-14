@@ -34,7 +34,81 @@ from dhuan.model.predict import load_artifact  # noqa: E402
 from dhuan.model.train import TEMPORAL_HOLDOUT_FRACTION, persistence_anchor  # noqa: E402
 
 
+def _measure(art: dict, matrix: np.ndarray, te: np.ndarray, actual: np.ndarray) -> dict:
+    """Score an artifact on the same rows the way the API serves."""
+    from dhuan.model.train import persistence_anchor
+
+    clip = float(art.get("delta_clip", 0.0))
+    radius = float(art.get("conformal_radius", 0.0))
+    anchor = persistence_anchor(matrix[te])
+    delta = np.asarray(art["models"]["p50"].predict(matrix[te]), dtype=float)
+    if clip > 0:
+        delta = np.clip(delta, -clip, clip)
+    mid = np.maximum(0.0, anchor + delta)
+    lo = np.maximum(0.0, mid - radius)
+    hi = mid + radius
+    err = actual - mid
+    var = float(np.var(actual))
+    return {
+        "mae": float(np.mean(np.abs(err))),
+        "rmse": float(np.sqrt(np.mean(err**2))),
+        "bias": float(np.mean(err)),
+        "r2": float(1 - np.mean(err**2) / var) if var > 0 else float("nan"),
+        "coverage": float(np.mean((actual >= lo) & (actual <= hi))),
+        "radius": radius,
+    }
+
+
+def compare_versions(matrix: np.ndarray, te: np.ndarray, actual: np.ndarray) -> int:
+    """Score every retained version on the SAME current holdout.
+
+    This is the point of keeping versions: a retrain is only meaningful if you
+    can ask "is this actually better than the last one?" on identical data
+    rather than comparing two numbers measured on different snapshots.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, str(ROOT / "backend" / "src"))
+    from dhuan.model.versions import load_artifact_version, load_registry
+
+    reg = load_registry()
+    versions = reg.get("versions", [])
+    if not versions:
+        print("No retained versions yet. Run `make train` once to record one.")
+        return 0
+
+    print(f"{'version':26} {'MAE':>7} {'RMSE':>7} {'R2':>7} {'cov':>7} {'rows':>10}  artifact")
+    print("-" * 82)
+    best = None
+    for entry in versions:
+        vid = entry["version_id"]
+        try:
+            art = load_artifact_version(vid)
+        except (FileNotFoundError, KeyError) as exc:
+            print(f"{vid:26} {'-':>7} {'-':>7} {'-':>7} {'-':>7} {entry.get('n_rows', 0):>10,}  {str(exc)[:22]}")
+            continue
+        m = _measure(art, matrix, te, actual)
+        mark = " <- current" if vid == reg.get("current") else ""
+        print(
+            f"{vid:26} {m['mae']:7.2f} {m['rmse']:7.2f} {m['r2']:7.3f} "
+            f"{m['coverage'] * 100:6.1f}% {entry.get('n_rows', 0):>10,}  on disk{mark}"
+        )
+        if best is None or m["mae"] < best[1]:
+            best = (vid, m["mae"])
+    print()
+    if best:
+        print(f"Best MAE on this holdout: {best[0]} at {best[1]:.2f} ug/m3")
+    return 0
+
+
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--compare", action="store_true", help="score every retained version")
+    ap.add_argument("--version", help="score one retained version id")
+    args = ap.parse_args()
+
     print("Loading snapshot (591k rows)...", flush=True)
     snapshot = load_snapshot()
     rows, labels, meta = build_training_frame(snapshot)
