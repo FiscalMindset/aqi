@@ -442,6 +442,27 @@ Resources:
             TableName: !Ref EstimatesTable
         - DynamoDBCrudPolicy:
             TableName: !Ref FeedsTable
+        # The pipeline resolves the same settings as the API, including the
+        # secrets in SSM. Without this the FIRMS key read as unset *in the
+        # pipeline only*: /ready moved to "stale" while every ingest run still
+        # recorded "MAP_KEY not configured", because this role had no ssm or kms
+        # permission at all. The API function had them; this one never did.
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dhuan/*
+            # SecureString parameters are encrypted with the account's default
+            # SSM key. Without kms:Decrypt the GetParameter call succeeds but
+            # decryption fails, and the caller sees a missing setting rather
+            # than a permission error.
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
         - Statement:
             - Effect: Allow
               Action: sns:Publish
