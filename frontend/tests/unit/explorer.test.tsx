@@ -7,32 +7,10 @@ import i18n from "../../src/i18n";
 import * as apiLib from "../../src/lib/api";
 
 // MapLibre needs WebGL; mock it for jsdom (the real map renders in e2e)
-vi.mock("maplibre-gl", () => {
-  class FakeMap {
-    addControl() {}
-    on() {}
-    flyTo() {}
-    remove() {}
-    getZoom() {
-      return 12;
-    }
-    getSource() {
-      return undefined;
-    }
-    addSource() {}
-    addLayer() {}
-    isStyleLoaded() {
-      return false;
-    }
-  }
-  return {
-    default: { Map: FakeMap, NavigationControl: class {} },
-    Map: FakeMap,
-    NavigationControl: class {},
-  };
-});
+vi.mock("maplibre-gl", () => maplibreMock());
 
 import { Explorer } from "../../src/features/explorer/Explorer";
+import { maplibreMock } from "../helpers/maplibre";
 
 function wrap(route = "/") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

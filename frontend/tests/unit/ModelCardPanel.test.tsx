@@ -132,3 +132,63 @@ describe("ModelCardPanel", () => {
     expect(document.body.textContent).toMatch(/much weaker at/i);
   });
 });
+describe("ModelCardPanel rendering paths", () => {
+
+  it("says so when a protocol has no coverage figure", () => {
+    const withNull: ModelCard = {
+      ...card,
+      temporal_holdout: { ...card.temporal_holdout, coverage80: null },
+    };
+    render(<ModelCardPanel card={withNull} />);
+    const table = document.body.textContent ?? "";
+    // an em dash, not "NaN%" or a silently invented 80%
+    expect(table).toMatch(/—/);
+    expect(table).not.toMatch(/NaN/);
+  });
+
+  it("does not claim the interval is narrow when coverage is at or above target", () => {
+    const good: ModelCard = {
+      ...card,
+      temporal_holdout: { ...card.temporal_holdout, coverage80: 0.82 },
+    };
+    render(<ModelCardPanel card={good} />);
+    expect(document.body.textContent).not.toMatch(/narrower than claimed/i);
+  });
+
+  it("says plainly when the model does not beat the baseline", () => {
+    const worse: ModelCard = {
+      ...card,
+      temporal_holdout: { ...card.temporal_holdout, mae: 30.0 },
+    };
+    render(<ModelCardPanel card={worse} />);
+    expect(document.body.textContent).toMatch(/does not yet beat/i);
+  });
+
+  it("still renders with no baselines recorded at all", () => {
+    render(<ModelCardPanel card={{ ...card, baselines: {} }} />);
+    expect(screen.getByTestId("model-card")).toBeTruthy();
+    expect(screen.queryByTestId("model-vs-baseline")).toBeNull();
+  });
+
+  it("tolerates a card with no feature list", () => {
+    render(<ModelCardPanel card={{ ...card, features: [] }} />);
+    expect(screen.getByTestId("model-card")).toBeTruthy();
+  });
+
+  it("shows the snapshot digest so the number can be traced to its data", () => {
+    render(<ModelCardPanel card={card} />);
+    expect(document.body.textContent).toMatch(/c7836258415ae075/);
+  });
+
+  it("reports zero stations honestly rather than hiding the limit", () => {
+    render(<ModelCardPanel card={{ ...card, stations: [] }} />);
+    expect(document.body.textContent).toMatch(/0 stations in training/);
+  });
+
+  it("renders the winner name and the conformal radius", () => {
+    render(<ModelCardPanel card={card} />);
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/quantile-model/);
+    expect(text).toMatch(/15\.0/);
+  });
+});

@@ -7,6 +7,11 @@ import i18n from "../../src/i18n";
 import { Subscribe } from "../../src/features/subscribe/Subscribe";
 import { RoutesCompare } from "../../src/features/routes/RoutesCompare";
 import * as apiLib from "../../src/lib/api";
+import { maplibreMock } from "../helpers/maplibre";
+
+// The location picker inside Subscribe dynamically imports MapLibre. Without
+// this the real library loads into jsdom and the form tests time out.
+vi.mock("maplibre-gl", () => maplibreMock());
 
 function wrap(ui: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -17,7 +22,39 @@ function wrap(ui: React.ReactNode) {
   );
 }
 
-beforeEach(() => vi.restoreAllMocks());
+// Subscribe reads the current estimate for the chosen point on mount so it can
+// say whether the chosen threshold would fire today. Left unmocked it issued a
+// real fetch in jsdom, which is what made these two tests intermittently take
+// four seconds and fail.
+const estimateStub = {
+  lat: 28.7146,
+  lon: 77.1025,
+  ts_utc: "2026-10-14T10:00:00+00:00",
+  pm25_low: 40,
+  pm25_mid: 55,
+  pm25_high: 70,
+  category: "Poor",
+  aqi_sub_index: null,
+  nearest_station_pm25: 55,
+  nearest_station_name: "Rohini",
+  data_age_seconds: 0,
+  stale: false,
+  model_version: "test",
+  served_by: "model",
+  cpcb_table_version: "2014-11-24",
+  honesty: "",
+  persistence_anchor_ugm3: 55,
+  model_adjustment_ugm3: 0,
+  features_used: [],
+  weather: null,
+  cross_check: null,
+  method: "gradient-boosted-trees on persistence-anchored residual",
+};
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  vi.spyOn(apiLib.api, "estimate").mockResolvedValue(estimateStub);
+});
 
 
 describe("Subscribe", () => {
@@ -28,12 +65,12 @@ describe("Subscribe", () => {
       locality: "Rohini",
     });
     wrap(<Subscribe />);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.type(screen.getByTestId("sub-email"), "parent@example.com");
     await user.click(screen.getByTestId("sub-submit"));
     await waitFor(() => expect(screen.getByTestId("sub-message")).toBeDefined());
     expect(screen.getByTestId("sub-message").textContent).toMatch(/confirm/i);
-  });
+  }, 20000);
 
   it("surfaces an API problem response as an alert", async () => {
     vi.spyOn(apiLib.api, "subscribe").mockRejectedValue(
@@ -48,11 +85,11 @@ describe("Subscribe", () => {
       ),
     );
     wrap(<Subscribe />);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.type(screen.getByTestId("sub-email"), "x@example.com");
     await user.click(screen.getByTestId("sub-submit"));
     await waitFor(() => expect(screen.getByRole("alert")).toBeDefined());
-  });
+  }, 20000);
 });
 
 describe("RoutesCompare", () => {
