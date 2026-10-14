@@ -58,7 +58,7 @@ python scripts/smoke.py --env staging
 
 echo "==> 6. frontend"
 if [[ -n "${WEB_BUCKET}" && -n "${CF_ID}" ]]; then
-  (cd frontend && npm ci && npm run build)
+  (VITE_BASE_PATH="${VITE_BASE_PATH:-/}" REQUIRE_BUILD_MATCH=1 ./scripts/build_web.sh)
   aws s3 sync frontend/dist "s3://${WEB_BUCKET}" --delete
   aws cloudfront create-invalidation --distribution-id "${CF_ID}" --paths "/*" >/dev/null
   echo "   web deployed + invalidated"
