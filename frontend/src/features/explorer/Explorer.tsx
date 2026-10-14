@@ -137,7 +137,9 @@ export function Explorer() {
           data-testid="desktop-panel"
           className="hidden md:flex md:order-2 w-[24rem] lg:w-[30rem] xl:w-[34rem] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-white/10 bg-slate-950/40 px-4 py-4 gap-4"
         >
-          <SearchBox onSelect={selectPlace} />
+          <div className="sticky top-0 z-20 -mx-4 bg-slate-950/95 px-4 pb-2 pt-1 backdrop-blur">
+            <SearchBox onSelect={selectPlace} />
+          </div>
           {panel}
         </aside>
       ) : (
@@ -164,7 +166,9 @@ export function Explorer() {
             }
           >
             <div className="p-4 space-y-4">
-              <SearchBox onSelect={selectPlace} />
+              <div className="sticky top-0 z-20 -mx-4 bg-night-800/95 px-4 pb-2 backdrop-blur">
+                <SearchBox onSelect={selectPlace} />
+              </div>
               {panel}
             </div>
           </BottomSheet>

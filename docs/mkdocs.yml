@@ -47,6 +47,7 @@ nav:
       - Data sources: DATA_SOURCES.md
   - Model:
       - Model card: MODEL_CARD.md
+      - Training data: training_data.md
       - Model method: MODEL.md
       - Gradient boosting: GRADIENT_BOOSTING.md
   - Agents:

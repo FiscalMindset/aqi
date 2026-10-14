@@ -98,7 +98,10 @@ export function Subscribe() {
           />
         </label>
 
-        <LocationPicker value={place} onChange={setPlace} />
+        <div className="sticky top-14 z-20 -mx-2 bg-night-800/95 px-2 py-2 backdrop-blur">
+          <LocationPicker value={place} onChange={setPlace} />
+        </div>
+
         <label className="block text-sm">
           {t("subscribe.locality")}
           <input

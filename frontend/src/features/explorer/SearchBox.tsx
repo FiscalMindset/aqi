@@ -41,6 +41,8 @@ export function SearchBox({
                 role="option"
                 aria-selected={false}
                 onClick={() => {
+                  // Picking a place supersedes any stale geolocation warning.
+                  setLocationNote(null);
                   onSelect(p.lat, p.lon);
                   setQ("");
                 }}

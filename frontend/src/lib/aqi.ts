@@ -35,21 +35,5 @@ export function onColor(category: string): string {
  * cannot be mistaken for a progress indicator: ring, square, triangle, filled
  * square, filled diamond, filled octagon.
  */
-export function categoryIcon(category: string): string {
-  switch (category) {
-    case "Good":
-      return "○";
-    case "Satisfactory":
-      return "□";
-    case "Moderately Polluted":
-      return "△";
-    case "Poor":
-      return "■";
-    case "Very Poor":
-      return "◆";
-    case "Severe":
-      return "✖";
-    default:
-      return "?";
-  }
-}
+
+export { AqiIcon } from "../components/AqiIcon";

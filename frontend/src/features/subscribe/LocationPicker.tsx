@@ -16,6 +16,22 @@ import type { Map as MlMap } from "maplibre-gl";
 import { allPlaces, searchPlaces, type Place } from "../../lib/places";
 import { api } from "../../lib/api";
 
+/** Closest gazetteer entry, used only to label the point ("My location near X"). */
+function nearestPlace(lat: number, lon: number): Place | null {
+  let best: Place | null = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const p of allPlaces()) {
+    const dx = p.lon - lon;
+    const dy = p.lat - lat;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return bestD <= 0.09 ? best : null;
+}
+
 export function LocationPicker({
   value,
   onChange,
@@ -28,6 +44,43 @@ export function LocationPicker({
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState("");
   const matches = query.trim() ? searchPlaces(query).slice(0, 6) : [];
+  const [locating, setLocating] = useState(false);
+  const [locNote, setLocNote] = useState<string | null>(null);
+
+  /**
+   * Let the browser supply the coordinates instead of making people find their
+   * own locality in a list. The point is kept verbatim - never snapped to a
+   * named place - because a person standing in Ghevra wants their own street,
+   * not the centroid of the Ghevra locality.
+   */
+  function useMyLocation(): void {
+    if (!navigator.geolocation) {
+      setLocNote("This browser cannot share your location. Search or tap the map instead.");
+      return;
+    }
+    setLocating(true);
+    setLocNote(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        const { latitude: lat, longitude: lon } = pos.coords;
+        const nearest = nearestPlace(lat, lon);
+        onChange({ name: `My location${nearest ? ` near ${nearest.name}` : ""}`, lat, lon });
+      },
+      (err) => {
+        setLocating(false);
+        // GeolocationPositionError.PERMISSION_DENIED is 1 per spec. Compare the
+        // code rather than err.PERMISSION_DENIED, which is not guaranteed to be
+        // present on every implementation of the error object.
+        setLocNote(
+          err.code === 1
+            ? "Location permission denied. Search or tap the map instead - both work."
+            : "Could not read your location. Search or tap the map instead.",
+        );
+      },
+      { timeout: 10000, enableHighAccuracy: true },
+    );
+  }
   const [estimate, setEstimate] = useState<{ mid: number; band: string } | null>(null);
 
   useEffect(() => {
@@ -113,6 +166,25 @@ export function LocationPicker({
     <div className="space-y-2" data-testid="location-picker">
       <label className="block text-sm">
         Search for a locality
+        <button
+          type="button"
+          data-testid="picker-use-location"
+          onClick={useMyLocation}
+          disabled={locating}
+          className="mb-2 flex min-h-touch w-full items-center justify-center gap-2 rounded bg-white/10 text-sm font-medium hover:bg-white/15 disabled:opacity-60"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden focusable="false">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            <circle cx="12" cy="12" r="8" />
+          </svg>
+          {locating ? "Finding your location…" : "Use my current location"}
+        </button>
+        {locNote && (
+          <p role="status" data-testid="picker-location-note" className="mb-2 text-xs text-amber-200">
+            {locNote}
+          </p>
+        )}
         <input
           data-testid="picker-search"
           value={query}

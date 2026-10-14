@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { categoryIcon, CATEGORY_COLORS, onColor } from "../../lib/aqi";
+import AqiIcon from "../../components/AqiIcon";
+import { CATEGORY_COLORS, onColor } from "../../lib/aqi";
 import { ApiError, type Estimate } from "../../lib/api";
 
 /** The estimate card: value, interval, category, station, age, honesty. */
@@ -42,18 +43,30 @@ export function EstimatePanel({
 
   return (
     <section aria-labelledby="estimate-heading" data-testid="estimate-panel">
-      <div className="flex items-baseline gap-3 flex-wrap">
-        <h2 id="estimate-heading" className="text-sm text-slate-300">
-          {t("explorer.estimate")}
-        </h2>
-        {/* value stays high-contrast; the category chip carries the color, always
-            paired with the icon (never color alone) */}
-        <span data-testid="estimate-value" className="text-3xl font-bold text-white">
-          {categoryIcon(estimate.category)} {estimate.pm25_mid.toFixed(0)}
-        </span>
-        <span className="text-sm text-slate-400">µg/m³</span>
+      <div
+        className="flex items-center gap-3 rounded-xl p-3 ring-1 ring-inset"
+        style={{ backgroundColor: `${color}1f`, borderColor: `${color}55` }}
+      >
         <span
-          className="text-xs px-2 py-1 rounded-full font-semibold"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+          style={{ backgroundColor: color, color: onColor(estimate.category) }}
+        >
+          <AqiIcon category={estimate.category} className="h-6 w-6" />
+        </span>
+        <div className="min-w-0">
+          <h2 id="estimate-heading" className="text-xs text-slate-300">
+            {t("explorer.estimate")}
+          </h2>
+          <div className="flex items-baseline gap-2">
+            <span data-testid="estimate-value" className="text-4xl font-bold leading-none text-white">
+              {estimate.pm25_mid.toFixed(0)}
+            </span>
+            <span className="text-sm text-slate-400">µg/m³</span>
+          </div>
+        </div>
+        <span
+          data-testid="estimate-category"
+          className="ml-auto rounded-full px-2.5 py-1 text-center text-[11px] font-semibold leading-tight"
           style={{ backgroundColor: color, color: onColor(estimate.category) }}
         >
           {t(`categories.${estimate.category}` as never)}
