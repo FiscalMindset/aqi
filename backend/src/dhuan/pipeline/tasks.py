@@ -121,6 +121,11 @@ def validate_and_merge(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
+    """Sync entry point: exactly one event loop for the whole task."""
+    return asyncio.run(_predict_grid(_event))
+
+
+async def _predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
     """Predict the H3 grid for the current hour.
 
     Uses the model artifact; when it is missing the task returns ok=False so
@@ -153,7 +158,7 @@ def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
         finally:
             await client.aclose()
 
-    hours = asyncio.run(_weather())
+    hours = await _weather()
     now_key = now.strftime("%Y-%m-%dT%H:00")
     wx = next(
         (
@@ -232,9 +237,9 @@ def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
         by_cell = {p_["cell"]: p_ for p_ in predictions}
         for cell, lat, lon in sub_points:
             try:
-                refined = _compute_estimate(lat, lon, get_settings_for_pipeline())
+                refined = await _compute_estimate_async(lat, lon, get_settings_for_pipeline())
             except Exception as exc:
-                logger.warning("cell_refine_failed %s: %s", cell, type(exc).__name__)
+                logger.warning("cell_refine_failed %s: %s: %s", cell, type(exc).__name__, exc)
                 continue
             row = {
                 "cell": cell,
@@ -298,7 +303,7 @@ def _parse_alerted_at(value: object) -> datetime | None:
         return None
 
 
-def _compute_estimate(lat: float, lon: float, settings: Any) -> Any:
+async def _compute_estimate_async(lat: float, lon: float, settings: Any) -> Any:
     """The API's own per-point estimate, imported lazily.
 
     Reusing the route's implementation is the point: the alert must be judged

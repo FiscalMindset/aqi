@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 import respx
@@ -536,14 +538,15 @@ class TestSubscribedCellsUseTheSameEstimateAsTheScreen:
         class Refined:
             pm25_low, pm25_mid, pm25_high, served_by = 76.0, 95.0, 114.0, "model"
 
-        monkeypatch.setattr(
-            tasks, "_compute_estimate", lambda lat, lon, settings: Refined()
-        )
+        async def fake_refine(lat: float, lon: float, settings: object) -> Refined:
+            return Refined()
+
+        monkeypatch.setattr(tasks, "_compute_estimate_async", fake_refine)
 
         # Reproduce the upgrade step against the swept rows.
         by_cell = {p["cell"]: p for p in swept}
         cell, lat, lon = ("c1", 28.6957, 76.9974)
-        refined = tasks._compute_estimate(lat, lon, None)
+        refined = asyncio.run(tasks._compute_estimate_async(lat, lon, None))
         swept[swept.index(by_cell[cell])] = {
             "cell": cell, "ts": "2026-10-14T12:00:00+00:00",
             "pm25_low": refined.pm25_low, "pm25_mid": refined.pm25_mid,
@@ -573,3 +576,52 @@ class TestDynamoNumberAttributes:
         assert as_str({"N": "1"}) is None
         # plain values still work, for callers using a deserialising client
         assert as_float(28.6) == pytest.approx(28.6)
+
+
+class TestPredictGridUsesOneEventLoop:
+    """The weather fetch and the per-cell refinement each ran their own
+    asyncio.run, so the cached HTTP client stayed bound to the first loop after
+    it closed and the second call raised RuntimeError. Subscribed cells were
+    never upgraded, so every alert kept being judged against the coarse sweep
+    value while the reader saw a different number on screen.
+    """
+
+    def test_task_is_a_single_coroutine(self) -> None:
+        import inspect
+
+        from dhuan.pipeline import tasks
+
+        assert inspect.iscoroutinefunction(tasks._predict_grid), (
+            "the task body must be a coroutine so one loop owns every client"
+        )
+
+    def test_the_task_entry_point_creates_exactly_one_loop(self) -> None:
+        import ast
+        import inspect
+        import pathlib
+
+        from dhuan.pipeline import tasks
+
+        assert inspect.iscoroutinefunction(tasks._compute_estimate_async)
+        # No nested loop may remain inside the task body.
+        src = pathlib.Path(inspect.getsourcefile(tasks) or "").read_text()
+        tree = ast.parse(src)
+        body = next(
+            n for n in tree.body
+            if isinstance(n, ast.AsyncFunctionDef) and n.name == "_predict_grid"
+        )
+        nested = [
+            n for n in ast.walk(body)
+            if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "run"
+        ]
+        assert not nested, "predict_grid must not call asyncio.run() from inside"
+
+    def test_refinement_is_awaited_not_run(self) -> None:
+        import inspect
+
+        from dhuan.pipeline import tasks
+
+        # Called with await, so it must be a coroutine function.
+        assert inspect.iscoroutinefunction(tasks._compute_estimate_async)
