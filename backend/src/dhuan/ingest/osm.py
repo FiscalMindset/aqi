@@ -113,7 +113,18 @@ class OverpassClient:
         raise last_exc if last_exc else RuntimeError("no overpass endpoints")
 
     async def aclose(self) -> None:
+        """Close the current client and leave this instance reusable.
+
+        These clients are cached process-wide in api/deps.py, and a Lambda
+        container handles many invocations. Closing the client without
+        replacing it left the cache holding a closed httpx client, so the next
+        invocation raised "Cannot send a request, as the client has been
+        closed" and the task silently degraded to a branch failure. Each
+        invocation also runs its own event loop, so a client bound to a
+        finished loop cannot be reused anyway - rebuild it here.
+        """
         await self._client.aclose()
+        self._client = make_client(HttpPolicy.from_settings(self.settings))
 
 
 def build_query(
