@@ -63,3 +63,62 @@ describe("api client", () => {
     );
   });
 });
+
+describe("base64-wrapped problem responses", () => {
+  // API Gateway returns successes as plain JSON but base64-encodes problem
+  // responses. res.json() then threw "Unexpected token 'e', eyJ..." and the
+  // reader saw a parse error instead of the API's actual message, which is the
+  // one thing worth showing them.
+  const problem = {
+    type: "https://api.dhuan-detective.example/problems/validation",
+    title: "Request validation failed",
+    status: 422,
+    detail: "from_lat is required.",
+  };
+
+  it("decodes a base64 problem body and surfaces its detail", async () => {
+    const encoded = btoa(JSON.stringify(problem));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(encoded, {
+        status: 422,
+        headers: { "content-type": "application/problem+json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.compareRoutes({
+      fromLat: 0, fromLon: 0, toLat: 0, toLon: 0,
+    })).rejects.toThrowError(/from_lat is required/);
+    vi.unstubAllGlobals();
+  });
+
+  it("still parses a plain problem body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(problem), {
+        status: 422,
+        headers: { "content-type": "application/problem+json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.compareRoutes({
+      fromLat: 0, fromLon: 0, toLat: 0, toLon: 0,
+    })).rejects.toThrowError(/from_lat is required/);
+    vi.unstubAllGlobals();
+  });
+
+  it("reports unreadable bodies instead of a bare parse error", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("<html>502</html>", {
+        status: 422,
+        headers: { "content-type": "application/problem+json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.compareRoutes({
+      fromLat: 0, fromLon: 0, toLat: 0, toLon: 0,
+    })).rejects.toThrowError(/502/);
+    vi.unstubAllGlobals();
+  });
+});

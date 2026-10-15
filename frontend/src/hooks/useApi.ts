@@ -75,7 +75,19 @@ export function useRouteCompare(
         toLon: to!.lon,
         maxSamples: 10,
       }),
-    enabled: Boolean(from && to),
+    // Both endpoints must exist AND carry finite coordinates. `Boolean(from &&
+    // to)` was true for a Place object whose lat/lon were undefined, so the
+    // request went out with missing fields, came back 422, and - because the
+    // gateway base64-encodes problem bodies - the reader saw a JSON parse error
+    // instead of "one or more fields are missing".
+    enabled: Boolean(
+      from &&
+        to &&
+        Number.isFinite(from.lat) &&
+        Number.isFinite(from.lon) &&
+        Number.isFinite(to.lat) &&
+        Number.isFinite(to.lon),
+    ),
     // routing + exposure profiling is expensive; a route does not change by the second
     staleTime: 5 * 60 * 1000,
   });

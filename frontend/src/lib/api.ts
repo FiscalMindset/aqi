@@ -425,7 +425,7 @@ async function request<T>(
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok && !(options.tolerateStatuses ?? []).includes(res.status)) {
       if (contentType.includes("application/problem+json")) {
-        const problem = (await res.json()) as Problem;
+        const problem = await readJson<Problem>(res);
         throw new ApiError(problem, res.status);
       }
       throw new ApiError(
@@ -433,10 +433,49 @@ async function request<T>(
         res.status,
       );
     }
-    return (await res.json()) as T;
+    return readJson<T>(res);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Read a JSON body, tolerating a base64-wrapped one.
+ *
+ * API Gateway in front of this service returns successful responses as plain
+ * JSON but base64-encodes problem responses, even though the template sets
+ * BinaryMediaTypes to a catch-all expecting verbatim passthrough. res.json() therefore
+ * threw a parse error and the reader saw that instead of the actual API
+ * problem, which is the one thing worth showing.
+ *
+ * Tries plain JSON first, then base64. If neither parses, the raw text is
+ * surfaced rather than swallowed.
+ */
+async function readJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // fall through to the base64 attempt
+  }
+  const trimmed = text.trim();
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed) && trimmed.length > 16) {
+    try {
+      const decoded = atob(trimmed);
+      return JSON.parse(decoded) as T;
+    } catch {
+      // fall through to the error below
+    }
+  }
+  throw new ApiError(
+    {
+      type: "about:blank",
+      title: "Unreadable response",
+      status: res.status,
+      detail: text.slice(0, 200),
+    },
+    res.status,
+  );
 }
 
 export const api = {
