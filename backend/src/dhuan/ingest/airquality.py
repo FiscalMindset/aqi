@@ -119,3 +119,14 @@ class AirQualityClient:
                 )
             )
         return out
+
+    async def aclose(self) -> None:
+        """Close the current client and leave this instance reusable.
+
+        Clients outlive a single task in a warm Lambda container but cannot
+        outlive the event loop they were used on, and a closed client raises
+        "Cannot send a request, as the client has been closed" on the next
+        task. Rebuilding here keeps the instance safe to reuse.
+        """
+        await self._client.aclose()
+        self._client = make_client(HttpPolicy.from_settings(self.settings))

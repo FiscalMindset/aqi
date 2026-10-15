@@ -574,7 +574,15 @@ def lambda_handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any
     if handler is None:
         record("PipelineUnknownTask", 1)
         return {"error": f"unknown task: {task}", "ok": False}
-    return handler(event)
+    try:
+        return handler(event)
+    finally:
+        # A warm container serves many invocations, each with a fresh event
+        # loop. Leaving clients cached here is what made later tasks fail with
+        # "client has been closed", so tear them down every time.
+        from dhuan.api.deps import reset_clients
+
+        reset_clients()
 
 
 __all__ = ["HANDLERS", "lambda_handler"]

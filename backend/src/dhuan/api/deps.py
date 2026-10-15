@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 from dhuan.core.cache import TTLCache
@@ -13,6 +15,8 @@ from dhuan.store.dynamodb import FeedsStore
 from dhuan.store.opensearch import SourceIndex
 
 _clients: dict[str, Any] = {}
+
+logger = logging.getLogger(__name__)
 
 
 def get_openaq(settings: Settings | None = None) -> OpenAQClient:
@@ -73,5 +77,20 @@ async def aclose_clients() -> None:
 
 
 def reset_clients() -> None:
-    """Drop cached clients so changed settings take effect (used by tests)."""
+    """Close and forget every cached client.
+
+    The cache is process-wide and a Lambda container serves many invocations,
+    each running its own event loop. An httpx client cannot be carried across
+    loops, so anything left behind is at best dead weight and at worst a closed
+    client that fails the next task. Teardown after every task makes each
+    invocation start as clean as a fresh container would.
+    """
+    for name, client in list(_clients.items()):
+        aclose = getattr(client, "aclose", None)
+        if aclose is None:
+            continue
+        try:
+            asyncio.run(aclose())
+        except Exception as exc:
+            logger.warning("client_reset_failed %s: %s", name, type(exc).__name__)
     _clients.clear()

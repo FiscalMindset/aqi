@@ -55,3 +55,50 @@ def test_repeat_runs_of_a_shared_client_keep_working() -> None:
 
     assert asyncio.run(task()) == "ok"
     assert asyncio.run(task()) == "ok"
+
+
+def test_dispatcher_tears_down_cached_clients_between_invocations() -> None:
+    """Two tasks in one container must not share a dead client.
+
+    The cache in api/deps.py is process-wide and each Lambda invocation runs its
+    own event loop, so anything left cached is unusable for the next task. The
+    dispatcher tears the cache down in a finally, which is what makes the second
+    invocation behave like a fresh container.
+    """
+    from dhuan.api import deps
+    from dhuan.pipeline import tasks
+
+    calls: list[str] = []
+    tasks.HANDLERS["_test"] = lambda _event: calls.append("ran") or {"ok": True}
+
+    deps._clients["fires"] = FireClient(_settings())
+    try:
+        assert tasks.lambda_handler({"task": "_test"}) == {"ok": True}
+        assert deps._clients == {}, "clients must not survive the invocation"
+        # The whole point: the second task sees an empty cache, not a dead client.
+        assert tasks.lambda_handler({"task": "_test"}) == {"ok": True}
+        assert calls == ["ran", "ran"]
+    finally:
+        tasks.HANDLERS.pop("_test", None)
+        deps._clients.clear()
+
+
+def test_reset_clients_survives_a_broken_client() -> None:
+    """Teardown must never mask the task result."""
+    from dhuan.api import deps
+
+    class Exploding:
+        async def aclose(self) -> None:
+            raise RuntimeError("nope")
+
+    deps._clients["fires"] = Exploding()
+    deps.reset_clients()
+    assert deps._clients == {}
+
+
+def test_airquality_client_is_reusable_after_aclose() -> None:
+    from dhuan.ingest.airquality import AirQualityClient
+
+    client = AirQualityClient(_settings())
+    asyncio.run(client.aclose())
+    assert not client._client.is_closed
