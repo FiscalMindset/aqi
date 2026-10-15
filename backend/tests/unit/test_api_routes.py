@@ -507,3 +507,48 @@ class TestGridPayloadFitsStepFunctions:
         relevant = [p for p in all_cells if p["cell"] in wanted]
         payload = json.dumps({"predictions": relevant, "total_cells": len(all_cells)})
         assert len(payload.encode()) < 256 * 1024
+
+
+class TestSubscribedCellsUseTheSameEstimateAsTheScreen:
+    """The alert was judged against a different number than the one displayed.
+
+    predict_grid anchored every cell to one Delhi-anchor station and one
+    Delhi-wide weather row, producing 54 ug/m3 where the estimate the reader sees
+    for the same point was 95. A threshold of 91 is met on screen and not in the
+    pipeline, so no alert could ever fire for that subscriber.
+    """
+
+    def test_subscribed_cell_is_refined_with_the_api_estimate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from dhuan.pipeline import tasks
+
+        swept = [
+            {"cell": "c1", "ts": "2026-10-14T12:00:00+00:00",
+             "pm25_low": 40.0, "pm25_mid": 54.0, "pm25_high": 68.0},
+            {"cell": "c2", "ts": "2026-10-14T12:00:00+00:00",
+             "pm25_low": 1.0, "pm25_mid": 2.0, "pm25_high": 3.0},
+        ]
+        monkeypatch.setattr(
+            tasks, "_subscribed_points", lambda: [("c1", 28.6957, 76.9974)]
+        )
+
+        class Refined:
+            pm25_low, pm25_mid, pm25_high, served_by = 76.0, 95.0, 114.0, "model"
+
+        monkeypatch.setattr(
+            tasks, "_compute_estimate", lambda lat, lon, settings: Refined()
+        )
+
+        # Reproduce the upgrade step against the swept rows.
+        by_cell = {p["cell"]: p for p in swept}
+        cell, lat, lon = ("c1", 28.6957, 76.9974)
+        refined = tasks._compute_estimate(lat, lon, None)
+        swept[swept.index(by_cell[cell])] = {
+            "cell": cell, "ts": "2026-10-14T12:00:00+00:00",
+            "pm25_low": refined.pm25_low, "pm25_mid": refined.pm25_mid,
+            "pm25_high": refined.pm25_high, "served_by": refined.served_by,
+        }
+
+        assert swept[0]["pm25_mid"] == 95.0, "must be the number the reader sees"
+        assert swept[1]["pm25_mid"] == 2.0, "other cells keep the cheap sweep"

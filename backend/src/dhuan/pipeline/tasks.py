@@ -209,6 +209,48 @@ def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
                 "pm25_high": pred.pm25_high,
             }
         )
+    # Subscribed cells get the SAME estimate the API serves for that point.
+    #
+    # The sweep above anchors every cell to one Delhi-anchor station and one
+    # Delhi-wide weather row, so it is a cheap city-wide approximation: at this
+    # point it produced 54 ug/m3 while the estimate the reader sees on screen
+    # was 95. An alert threshold checked against 54 when the page says 95 is
+    # worse than no alert at all - it is a number that cannot mean anything to
+    # the person receiving it.
+    #
+    # Only the handful of cells that have a subscriber on them are redone with
+    # the per-point path (nearest station anchor, cell-local weather, real
+    # source distances). The rest of the grid keeps the cheap sweep.
+    upgraded = 0
+    try:
+        sub_points = _subscribed_points()
+    except Exception as exc:
+        logger.warning("subscribed_points_unavailable: %s", type(exc).__name__)
+        sub_points = []
+
+    if sub_points:
+        by_cell = {p_["cell"]: p_ for p_ in predictions}
+        for cell, lat, lon in sub_points:
+            try:
+                refined = _compute_estimate(lat, lon, get_settings_for_pipeline())
+            except Exception as exc:
+                logger.warning("cell_refine_failed %s: %s", cell, type(exc).__name__)
+                continue
+            row = {
+                "cell": cell,
+                "ts": now.isoformat(),
+                "pm25_low": refined.pm25_low,
+                "pm25_mid": refined.pm25_mid,
+                "pm25_high": refined.pm25_high,
+                "served_by": refined.served_by,
+            }
+            if cell in by_cell:
+                predictions[predictions.index(by_cell[cell])] = row
+            else:
+                predictions.append(row)
+            upgraded += 1
+        record("PipelineCellsUpgraded", upgraded)
+
     record("PipelinePredictions", len(predictions))
 
     # Persist every cell here. This used to be handed to the next task through
@@ -254,6 +296,37 @@ def _parse_alerted_at(value: object) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _compute_estimate(lat: float, lon: float, settings: Any) -> Any:
+    """The API's own per-point estimate, imported lazily.
+
+    Reusing the route's implementation is the point: the alert must be judged
+    against exactly the number the reader sees, so both must come from the same
+    code rather than from two similar-looking implementations.
+    """
+    from dhuan.api.routers.estimate import compute_estimate
+
+    return asyncio.run(compute_estimate(lat, lon, settings))
+
+
+def _subscribed_points() -> list[tuple[str, float, float]]:
+    """(cell, lat, lon) for every subscription, deduplicated by cell."""
+    from dhuan.geo.grid import cell_for_point
+    from dhuan.store.dynamodb import SubscriptionsStore
+
+    out: list[tuple[str, float, float]] = []
+    seen: set[str] = set()
+    for sub in SubscriptionsStore().all_subscriptions():
+        lat, lon = sub.get("lat"), sub.get("lon")
+        if lat is None or lon is None:
+            continue
+        cell = cell_for_point(Point(float(lat), float(lon)))
+        if cell in seen:
+            continue
+        seen.add(cell)
+        out.append((cell, float(lat), float(lon)))
+    return out
 
 
 def _subscribed_cells() -> set[str]:
