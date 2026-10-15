@@ -29,6 +29,36 @@ logger = get_logger("store.dynamodb")
 ESTIMATES_TTL_DAYS = 90
 
 
+def as_float(value: object) -> float | None:
+    """Read a number out of a raw DynamoDB attribute, or None if absent.
+
+    A low-level client returns numbers as {"N": "28.69"}. Reading those with
+    float() raises TypeError, which the callers all wrapped in a broad except -
+    so the alert quietly degraded to "no subscribers" instead of failing loudly.
+    """
+    if isinstance(value, dict):
+        raw = value.get("N")
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, (int, float, Decimal)):
+        return float(value)
+    return None
+
+
+def as_str(value: object) -> str | None:
+    """Read a string out of a raw DynamoDB attribute, or None if absent."""
+    if isinstance(value, dict):
+        raw = value.get("S")
+        return None if raw is None else str(raw)
+    if isinstance(value, str):
+        return value
+    return None
+
+
 def _dec(value: float | int) -> Decimal:
     """DynamoDB stores numbers as Decimal; float serialisation raises TypeError."""
     return Decimal(str(value))

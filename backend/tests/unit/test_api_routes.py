@@ -552,3 +552,24 @@ class TestSubscribedCellsUseTheSameEstimateAsTheScreen:
 
         assert swept[0]["pm25_mid"] == 95.0, "must be the number the reader sees"
         assert swept[1]["pm25_mid"] == 2.0, "other cells keep the cheap sweep"
+
+
+class TestDynamoNumberAttributes:
+    """Reading a low-level DynamoDB number with float() raises TypeError.
+
+    Every caller wrapped the read in a broad except, so a subscription whose
+    coordinates are {"N": "28.69"} was silently skipped: no subscribers found,
+    no upgrade, no alert, no error. The quiet failure is the problem, not the
+    type.
+    """
+
+    def test_reads_a_low_level_number_attribute(self) -> None:
+        from dhuan.store.dynamodb import as_float, as_str
+
+        assert as_float({"N": "28.695770259377355"}) == pytest.approx(28.69577)
+        assert as_float({"S": "28.6"}) is None
+        assert as_float(None) is None
+        assert as_str({"S": "Ghevra"}) == "Ghevra"
+        assert as_str({"N": "1"}) is None
+        # plain values still work, for callers using a deserialising client
+        assert as_float(28.6) == pytest.approx(28.6)

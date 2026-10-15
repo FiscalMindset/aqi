@@ -313,19 +313,20 @@ def _compute_estimate(lat: float, lon: float, settings: Any) -> Any:
 def _subscribed_points() -> list[tuple[str, float, float]]:
     """(cell, lat, lon) for every subscription, deduplicated by cell."""
     from dhuan.geo.grid import cell_for_point
-    from dhuan.store.dynamodb import SubscriptionsStore
+    from dhuan.store.dynamodb import SubscriptionsStore, as_float
 
     out: list[tuple[str, float, float]] = []
     seen: set[str] = set()
     for sub in SubscriptionsStore().all_subscriptions():
-        lat, lon = sub.get("lat"), sub.get("lon")
+        lat = as_float(sub.get("lat"))
+        lon = as_float(sub.get("lon"))
         if lat is None or lon is None:
             continue
-        cell = cell_for_point(Point(float(lat), float(lon)))
+        cell = cell_for_point(Point(lat, lon))
         if cell in seen:
             continue
         seen.add(cell)
-        out.append((cell, float(lat), float(lon)))
+        out.append((cell, lat, lon))
     return out
 
 
@@ -335,16 +336,8 @@ def _subscribed_cells() -> set[str]:
     Scanning the whole subscriber table per hour is fine: it is one item per
     subscriber-locality pair, not a grid walk.
     """
-    from dhuan.geo.grid import cell_for_point
-    from dhuan.store.dynamodb import SubscriptionsStore
 
-    cells: set[str] = set()
-    for sub in SubscriptionsStore().all_subscriptions():
-        lat, lon = sub.get("lat"), sub.get("lon")
-        if lat is None or lon is None:
-            continue
-        cells.add(cell_for_point(Point(float(lat), float(lon))))
-    return cells
+    return {cell for cell, _lat, _lon in _subscribed_points()}
 
 
 def _latest_station_value() -> float | None:
@@ -389,7 +382,7 @@ def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
     harmless - SNS simply will not deliver it - so SNS is the single real gate
     and this side stays out of the way.
     """
-    from dhuan.store.dynamodb import SubscriptionsStore
+    from dhuan.store.dynamodb import SubscriptionsStore, as_float, as_str
 
     predictions = event.get("predictions", [])
     by_cell = {p["cell"]: p for p in predictions}
@@ -400,7 +393,9 @@ def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
     # locality estimates: anchor on the grid cell nearest each subscription
     estimates: dict[str, float] = {}
     for sub in subs:
-        lat, lon = float(sub["lat"]), float(sub["lon"])
+        lat, lon = as_float(sub.get("lat")), as_float(sub.get("lon"))
+        if lat is None or lon is None:
+            continue
         from dhuan.geo.grid import cell_for_point
 
         cell = cell_for_point(Point(lat, lon))
@@ -418,7 +413,7 @@ def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
 
         d = decide(
             current_pm25=pm25,
-            threshold_category=str(sub.get("threshold_category", "Poor")),
+            threshold_category=as_str(sub.get("threshold_category")) or "Poor",
             last_band=sub.get("last_band"),
             last_alerted_at=_parse_alerted_at(sub.get("last_alerted_at")),
             now=now,
