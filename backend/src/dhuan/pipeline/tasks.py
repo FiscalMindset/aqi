@@ -246,6 +246,16 @@ def predict_grid(_event: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _parse_alerted_at(value: object) -> datetime | None:
+    """The stored last_alerted_at, or None if it is absent or unreadable."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def _subscribed_cells() -> set[str]:
     """H3 cells containing at least one subscription.
 
@@ -337,7 +347,7 @@ def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
             current_pm25=pm25,
             threshold_category=str(sub.get("threshold_category", "Poor")),
             last_band=sub.get("last_band"),
-            last_alerted_at=None,
+            last_alerted_at=_parse_alerted_at(sub.get("last_alerted_at")),
             now=now,
         )
         # Everything publish_alerts needs travels with the decision, because the
@@ -360,10 +370,12 @@ def evaluate_alerts(event: dict[str, Any]) -> dict[str, Any]:
 def publish_alerts(event: dict[str, Any]) -> dict[str, Any]:
     """Publish decided alerts via SNS (no-op with a warning if unconfigured)."""
     from dhuan.alerts.alerts import best_alerter, compose_message
+    from dhuan.store.dynamodb import SubscriptionsStore
 
     alerts = event.get("alerts", [])
     alerter = best_alerter(get_settings_for_pipeline())
     settings = get_settings_for_pipeline()
+    store = SubscriptionsStore()
     published = 0
     skipped = 0
     for alert in alerts:
@@ -406,6 +418,18 @@ def publish_alerts(event: dict[str, Any]) -> dict[str, Any]:
         )
         if message_id:
             published += 1
+            # Record what was sent. Without this the decision is stateless:
+            # last_band stays unset, so hysteresis never engages and the
+            # minimum-gap rule never applies, and the same crossing would be
+            # emailed again on every hourly run.
+            try:
+                store.update_alert_state(
+                    str(alert.get("sub") or ""),
+                    str(alert["decision"].get("band") or ""),
+                    datetime.now(UTC).isoformat(),
+                )
+            except Exception as exc:
+                logger.warning("alert_state_write_failed: %s", type(exc).__name__)
     record("PipelineAlertsPublished", published)
     if skipped:
         record("PipelineAlertsSkipped", skipped)
