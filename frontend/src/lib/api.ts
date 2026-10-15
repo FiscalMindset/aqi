@@ -522,7 +522,7 @@ export const api = {
     toLon: number;
     maxSamples?: number;
   }) =>
-    requestAt<RouteComparison>(
+    request<RouteComparison>(
       "/routes/compare",
       {
         method: "POST",
@@ -535,6 +535,7 @@ export const api = {
           max_samples: body.maxSamples ?? 10,
         }),
       },
+      API_BASE,
       { timeoutMs: ROUTE_TIMEOUT_MS },
     ),
   model: () => request<ModelCard>("/model"),

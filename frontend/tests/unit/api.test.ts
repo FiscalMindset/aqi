@@ -122,3 +122,41 @@ describe("base64-wrapped problem responses", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("compareRoutes URL", () => {
+  // Regression: compareRoutes was the one caller using requestAt, whose base is
+  // BASE_PATH with no /v1 segment. It requested /staging/routes/compare, which
+  // the SPA catch-all answered with 405 Method Not Allowed - and because problem
+  // bodies arrive base64-wrapped, the page showed a JSON parse error instead.
+  it("includes the /v1 prefix every other endpoint uses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ corridors: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.compareRoutes({ fromLat: 28.6, fromLon: 77.2, toLat: 28.7, toLon: 77.1 });
+
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("/v1/routes/compare");
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the route payload the API documents", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ corridors: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.compareRoutes({ fromLat: 28.6, fromLon: 77.2, toLat: 28.7, toLon: 77.1 });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body ?? "{}"));
+    expect(body).toMatchObject({ from_lat: 28.6, to_lon: 77.1 });
+    vi.unstubAllGlobals();
+  });
+});
