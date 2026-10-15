@@ -49,7 +49,8 @@
     "error": "Could not load the estimate. Retry.",
     "retry": "Retry",
     "outside": "This point is outside our Delhi-NCR coverage. Try a place in Delhi-NCR.",
-    "locationUnavailable": "Location is unavailable here — search for a place instead."
+    "locationUnavailable": "Location is unavailable here — search for a place instead.",
+    "estimating": "Estimating the air at your point…"
   },
   "categories": {
     "Good": "Good",

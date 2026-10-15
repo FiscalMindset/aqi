@@ -96,3 +96,33 @@ describe("EstimatePanel", () => {
     expect(screen.getByRole("alert")).toBeDefined();
   });
 });
+
+describe("EstimatePanel loading state", () => {
+  // The loading state used to be one empty block, which reads as "nothing here"
+  // rather than "working". It must mirror the real card so the panel does not
+  // jump when the number arrives, and it must say what it is doing.
+  it("renders a structured placeholder, not an empty box", () => {
+    render(<EstimatePanel loading />);
+    const box = screen.getByTestId("estimate-loading");
+    expect(box).toBeTruthy();
+    expect(box.getAttribute("aria-busy")).toBe("true");
+    // disc + two text bars + chip
+    expect(box.querySelectorAll(".skeleton").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("tells assistive tech it is estimating", () => {
+    render(<EstimatePanel loading />);
+    expect(screen.getByTestId("estimate-loading").textContent).toMatch(/estimating/i);
+  });
+
+  it("shows no value while loading, so a stale number is never implied", () => {
+    render(<EstimatePanel loading />);
+    expect(screen.queryByTestId("estimate-value")).toBeNull();
+  });
+
+  it("shows the value once loaded", () => {
+    render(<EstimatePanel estimate={estimate} loading={false} />);
+    expect(screen.queryByTestId("estimate-loading")).toBeNull();
+    expect(screen.getByTestId("estimate-value")).toBeTruthy();
+  });
+});

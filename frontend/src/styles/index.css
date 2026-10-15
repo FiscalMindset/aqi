@@ -33,6 +33,40 @@
   .skeleton {
     @apply animate-pulse rounded bg-white/10;
   }
+
+  /* A travelling highlight, so a skeleton reads as work in progress rather
+     than as an empty box. The mask confines the sweep to the element itself. */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.09),
+      transparent
+    );
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
+  }
+  @keyframes skeleton-sweep {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+/* Respect a reader who has asked for less motion: a static placeholder is
+   still a placeholder. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeleton-shimmer::after {
+    animation: none !important;
+  }
 }
 
 /* MapLibre renders 29px third-party controls; enlarge to the 44px target */

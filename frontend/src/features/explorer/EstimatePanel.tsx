@@ -16,7 +16,26 @@ export function EstimatePanel({
   compact?: boolean;
 }) {
   const { t } = useTranslation();
-  if (loading) return <div className="skeleton h-24 rounded bg-white/5" aria-busy="true" />;
+  // The old loading state was one empty 96px block, which reads as "nothing
+  // here" rather than "working". It now mirrors the real card's shape - disc,
+  // figure, unit, category chip - so the panel does not jump when the number
+  // arrives, and it says what it is doing.
+  if (loading)
+    return (
+      <div
+        className="flex items-center gap-3 rounded-xl p-3 ring-1 ring-inset ring-white/10"
+        aria-busy="true"
+        data-testid="estimate-loading"
+      >
+        <span className="skeleton skeleton-shimmer h-11 w-11 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1">
+          <span className="skeleton skeleton-shimmer block h-3 w-16" />
+          <span className="skeleton skeleton-shimmer mt-1.5 block h-8 w-20" />
+        </div>
+        <span className="skeleton skeleton-shimmer ml-auto h-6 w-24 rounded-full" />
+        <span className="sr-only">{t("explorer.estimating")}</span>
+      </div>
+    );
   if (error)
     return (
       <div role="alert" data-testid="estimate-error" className="p-3 rounded bg-red-950/60 text-sm">
