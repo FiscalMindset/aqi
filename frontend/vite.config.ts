@@ -101,15 +101,10 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // code-split map and charts (performance budgets)
-          maplibre: ["maplibre-gl"],
-          charts: ["recharts"],
-        },
-      },
-    },
+    // No manualChunks. Naming maplibre and recharts as manual chunks forced a
+    // static import edge from the entry chunk into both, so every route loaded
+    // 924 KB of map and chart code even though only the map routes import them.
+    // The dynamic import() calls already split them correctly on their own.
   },
   test: {
     environment: "jsdom",
