@@ -81,7 +81,7 @@
    buttons were clipped, and the legend sat on top of the anchor chip. These
    rules are scoped to small screens so the desktop layout is untouched. */
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   /* Primary nav: wrap instead of clipping. Horizontal scroll hid three links
      behind the fold with no affordance to say they were there. */
   header nav[aria-label="Primary mobile"] {
@@ -121,5 +121,53 @@
   .map-anchor {
     max-width: calc(100% - 1rem);
     font-size: 0.6875rem;
+  }
+}
+
+/* ------------------------------------------------------------ mid width ---
+   The first phone pass stopped at 767px, which is exactly where Tailwind
+   switches to the desktop nav. Between 768 and 1023 the map toolbar buttons
+   and the wide tables ran past the viewport with no wrapping at all, so a
+   tablet or a small laptop window got a horizontally clipped page. */
+
+/* Wide tables scroll inside their own box rather than pushing the page. */
+@media (max-width: 1023px) {
+  .overflow-x-auto > table {
+    min-width: 0;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  /* Keep the estimate card and its evidence panels readable when narrow. */
+  .panel-grid,
+  .estimate-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Between 768 and 1023 the desktop nav has all seven links but no room for
+   them, so it pushed the language switch past the viewport edge. Letting the
+   nav shrink and scroll keeps the switch on screen, which matters more than
+   every link being visible at once. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  header nav[aria-label="Primary"] {
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  header nav[aria-label="Primary"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  header nav[aria-label="Primary"] a {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-size: 0.8125rem;
   }
 }
