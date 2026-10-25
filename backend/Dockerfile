@@ -22,7 +22,7 @@
 # base images are designed for.
 
 # --------------------------------------------------------------- builder ----
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 
 ARG UV_VERSION=0.5.11
 
