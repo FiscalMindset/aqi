@@ -47,7 +47,7 @@ COPY backend/models ./models
 COPY backend/data ./data
 
 # --------------------------------------------------------------- runtime ----
-FROM public.ecr.aws/lambda/python:3.12-arm64 AS lambda
+FROM public.ecr.aws/lambda/python:3.15-arm64 AS lambda
 
 ENV PYTHONPATH="/opt/python:/var/task/src" \
     PYTHONUNBUFFERED=1 \
